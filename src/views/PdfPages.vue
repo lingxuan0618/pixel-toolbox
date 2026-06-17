@@ -3,6 +3,7 @@ import { ref, shallowRef, onUnmounted } from 'vue'
 import { PDFDocument, degrees } from 'pdf-lib'
 import { pdfjsLib } from '../lib/pdfjs'
 import ToolLayout from '../components/ToolLayout.vue'
+import PdfToolTabs from '../components/PdfToolTabs.vue'
 import PixelButton from '../components/PixelButton.vue'
 import { downloadBlob } from '../lib/download'
 
@@ -183,6 +184,8 @@ onUnmounted(() => {
     icon="🔄"
     description="拖曳排序頁面、單頁旋轉、刪除不要的頁。一次搞定。"
   >
+    <PdfToolTabs current="/pdf-pages" />
+
     <div
       v-if="!pdfFile"
       class="dropzone"

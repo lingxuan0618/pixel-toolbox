@@ -3,6 +3,7 @@ import { ref, onUnmounted } from 'vue'
 import { PDFDocument } from 'pdf-lib'
 import { pdfjsLib } from '../lib/pdfjs'
 import ToolLayout from '../components/ToolLayout.vue'
+import PdfToolTabs from '../components/PdfToolTabs.vue'
 import PixelButton from '../components/PixelButton.vue'
 
 interface FileEntry {
@@ -188,6 +189,8 @@ async function merge() {
     icon="🗂️"
     description="多份 PDF 加進來,排好順序,一鍵合併下載。順序由上到下。"
   >
+    <PdfToolTabs current="/pdf-merge" />
+
     <!-- 拖曳區 -->
     <div
       class="dropzone"

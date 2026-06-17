@@ -3,6 +3,7 @@ import { ref, shallowRef, computed, onUnmounted } from 'vue'
 import { PDFDocument } from 'pdf-lib'
 import { pdfjsLib } from '../lib/pdfjs'
 import ToolLayout from '../components/ToolLayout.vue'
+import PdfToolTabs from '../components/PdfToolTabs.vue'
 import PixelButton from '../components/PixelButton.vue'
 import { downloadBlob } from '../lib/download'
 
@@ -220,6 +221,8 @@ onUnmounted(() => {
     icon="✂️"
     description="點縮圖或輸入頁碼範圍,把想要的頁面拆成一份新 PDF。"
   >
+    <PdfToolTabs current="/pdf-split" />
+
     <!-- 選檔 -->
     <div
       v-if="!pdfFile"
