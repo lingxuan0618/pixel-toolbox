@@ -119,16 +119,16 @@ h3 {
     font-size: 22px;
   }
   .tool-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 14px;
   }
   .tool-icon {
-    font-size: 36px;
-    margin-bottom: 12px;
+    font-size: 32px;
+    margin-bottom: 8px;
     text-align: center;
   }
   h3 {
-    font-size: 14px;
+    font-size: 12px;
     margin: 0;
     text-align: center;
   }
@@ -141,7 +141,7 @@ h3 {
   }
   /* 把卡片的內距調大一點，手機上看起來比較完整 */
   .tool-link :deep(.pixel-card-component) {
-    padding: 20px 16px;
+    padding: 16px 12px;
     box-shadow: 4px 4px 0 0 var(--shadow);
   }
   .tool-link :deep(.pixel-card-component.hoverable:hover) {
@@ -152,6 +152,9 @@ h3 {
 @media (max-width: 480px) {
   .hero h1 {
     font-size: 20px;
+  }
+  .tool-grid {
+    grid-template-columns: 1fr;
   }
   .tool-link :deep(.pixel-card-component) {
     padding: 18px 14px;
