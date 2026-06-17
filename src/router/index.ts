@@ -1,4 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { isAndroid } from '../lib/platform'
 
 export const router = createRouter({
   history: createWebHashHistory(),
@@ -50,6 +51,9 @@ export const router = createRouter({
       name: 'heic-convert',
       component: () => import('../views/HeicConvert.vue'),
       meta: { title: 'HEIC → JPG · Pixel Toolbox' },
+      beforeEnter: () => {
+        if (isAndroid()) return '/'
+      },
     },
     {
       path: '/image-convert',

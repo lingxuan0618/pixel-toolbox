@@ -119,26 +119,29 @@ h3 {
     font-size: 20px;
   }
   .tool-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
+    grid-template-columns: 1fr;
+    gap: 12px;
   }
   .tool-icon {
-    font-size: 28px;
-    margin-bottom: 6px;
+    font-size: 34px;
+    margin-bottom: 10px;
     text-align: center;
   }
   h3 {
-    font-size: 11px;
+    font-size: 13px;
     margin: 0;
     text-align: center;
   }
-  .tool-desc,
-  .tool-btn {
+  .tool-desc {
     display: none;
   }
-  /* 把卡片的內距縮小一點 */
+  .tool-btn {
+    width: 100%;
+    margin-top: 10px;
+  }
+  /* 把卡片的內距調大一點，手機上看起來比較完整 */
   .tool-link :deep(.pixel-card-component) {
-    padding: 14px 8px;
+    padding: 18px 14px;
     box-shadow: 4px 4px 0 0 var(--shadow);
   }
   .tool-link :deep(.pixel-card-component.hoverable:hover) {
