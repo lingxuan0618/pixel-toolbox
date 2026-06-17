@@ -3,6 +3,7 @@ import { ref, shallowRef } from 'vue'
 import JSZip from 'jszip'
 import { pdfjsLib } from '../lib/pdfjs'
 import ToolLayout from '../components/ToolLayout.vue'
+import PdfToolTabs from '../components/PdfToolTabs.vue'
 import PixelButton from '../components/PixelButton.vue'
 import { downloadBlob } from '../lib/download'
 
@@ -115,6 +116,8 @@ function reset() {
     icon="🖼️"
     description="把 PDF 每一頁轉成圖片,可選格式、品質、解析度。"
   >
+    <PdfToolTabs current="/pdf-to-images" />
+
     <div
       v-if="!pdfFile"
       class="dropzone"
@@ -155,8 +158,9 @@ function reset() {
         </label>
 
         <label class="field">
-          <span class="label">解析度({{ scale }}x)</span>
+          <span class="label">解析度({{ scale }}x, 越高越清楚也越大)</span>
           <input v-model.number="scale" type="range" min="1" max="4" step="0.5" />
+          <small class="help">1x 適合快速預覽, 2x 比較平衡, 4x 細節最多但檔案也最大。</small>
         </label>
       </div>
 
@@ -228,6 +232,10 @@ function reset() {
 .label {
   font-size: 10px;
   color: var(--accent-2);
+}
+.help {
+  font-size: 10px;
+  color: var(--text-dim);
 }
 .pixel-input {
   font-family: inherit;
