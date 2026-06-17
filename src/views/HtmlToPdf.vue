@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue'
 import ToolLayout from '../components/ToolLayout.vue'
 import PixelButton from '../components/PixelButton.vue'
@@ -6,12 +6,12 @@ import PixelButton from '../components/PixelButton.vue'
 type Format = 'a4' | 'letter' | 'a3' | 'a5'
 type Orientation = 'portrait' | 'landscape'
 
-const html = ref(`<h1>標題</h1>
-<p>把任何 HTML 貼進來,按下生成就會變成 PDF。</p>
-<p>支援 <strong>標籤</strong>、<em>樣式</em>、表格、清單、圖片(用網址 url 引用)…</p>
+const html = ref(`<h1>璅?</h1>
+<p>?遙雿?HTML 鞎潮脖?,????撠望?霈? PDF??/p>
+<p>?舀 <strong>璅惜</strong>??em>璅??</em>?”?潦??柴????函雯? url 撘)??/p>
 <ul>
-  <li>項目 1</li>
-  <li>項目 2</li>
+  <li>? 1</li>
+  <li>? 2</li>
 </ul>`)
 const css = ref(`body {
   font-family: "Helvetica", "Microsoft JhengHei", sans-serif;
@@ -37,8 +37,27 @@ const builtHtml = computed(() => {
   return `<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><style>${css.value}</style></head><body>${html.value}</body></html>`
 })
 
+
+function waitForFrame() {
+  return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+}
+
+async function waitForRender(target: HTMLElement) {
+  const fontReady = 'fonts' in document ? (document as Document & { fonts: FontFaceSet }).fonts.ready : Promise.resolve()
+  const imageReady = Array.from(target.querySelectorAll('img')).map((img) =>
+    img.complete
+      ? Promise.resolve()
+      : new Promise<void>((resolve) => {
+          img.addEventListener('load', () => resolve(), { once: true })
+          img.addEventListener('error', () => resolve(), { once: true })
+        }),
+  )
+
+  await Promise.all([fontReady, waitForFrame(), ...imageReady])
+}
+
 function refreshPreview() {
-  // 用 data: URI 做出 sandbox iframe 預覽
+  // ??data: URI ? sandbox iframe ?汗
   const blob = new Blob([builtHtml.value], { type: 'text/html;charset=utf-8' })
   if (previewSrc.value) URL.revokeObjectURL(previewSrc.value)
   previewSrc.value = URL.createObjectURL(blob)
@@ -47,12 +66,13 @@ function refreshPreview() {
 async function generate() {
   isProcessing.value = true
   error.value = null
+  let wrap: HTMLDivElement | null = null
   try {
-    // 動態載入 html2pdf,避免初始 bundle 太大
+    // ??頛 html2pdf,?踹??? bundle 憭芸之
     const { default: html2pdf } = await import('html2pdf.js') as any
 
-    // 把 HTML 放進隱形容器,html2canvas 才有東西可拍
-    const wrap = document.createElement('div')
+    // ??HTML ?暸脤敶Ｗ捆??html2canvas ???梯正?舀?
+    wrap = document.createElement('div')
     wrap.style.position = 'fixed'
     wrap.style.left = '-9999px'
     wrap.style.top = '0'
@@ -60,6 +80,7 @@ async function generate() {
       orientation.value === 'portrait' ? '794px' : '1123px' // A4 @ 96dpi
     wrap.innerHTML = `<style>${css.value}</style>${html.value}`
     document.body.appendChild(wrap)
+    await waitForRender(wrap)
 
     const fname = outputName.value.trim() || 'document'
     const finalName = /\.pdf$/i.test(fname) ? fname : fname + '.pdf'
@@ -75,11 +96,12 @@ async function generate() {
       })
       .from(wrap)
       .save()
-
-    document.body.removeChild(wrap)
   } catch (e: unknown) {
-    error.value = '產生失敗:' + (e instanceof Error ? e.message : '未知錯誤')
+    error.value = '?Ｙ?憭望?:' + (e instanceof Error ? e.message : '?芰?航炊')
   } finally {
+    if (wrap && wrap.parentNode) {
+      wrap.parentNode.removeChild(wrap)
+    }
     isProcessing.value = false
   }
 }
@@ -90,7 +112,7 @@ function loadFromHtmlFile(e: Event) {
   const reader = new FileReader()
   reader.onload = () => {
     const text = reader.result as string
-    // 抽出 <style> 與 <body>
+    // ?賢 <style> ??<body>
     const styleMatch = text.match(/<style[^>]*>([\s\S]*?)<\/style>/i)
     if (styleMatch) css.value = styleMatch[1].trim()
     const bodyMatch = text.match(/<body[^>]*>([\s\S]*?)<\/body>/i)
@@ -100,7 +122,7 @@ function loadFromHtmlFile(e: Event) {
   ;(e.target as HTMLInputElement).value = ''
 }
 
-// 初始化一次預覽
+// ????甈⊿?閬?
 refreshPreview()
 
 onUnmounted(() => {
@@ -110,16 +132,15 @@ onUnmounted(() => {
 
 <template>
   <ToolLayout
-    title="HTML → PDF"
+    title="HTML 轉 PDF"
     icon="📰"
-    description="貼上 HTML、可選 CSS,自動分頁產生 PDF。也可以直接匯入 .html 檔。"
+    description="貼上 HTML 與 CSS，預覽後直接輸出成 PDF。"
   >
     <p v-if="error" class="err">⚠ {{ error }}</p>
 
     <div class="grid">
-      <!-- HTML 輸入 -->
       <label class="field tall">
-        <span class="label">HTML(只要寫 body 內容就好)</span>
+        <span class="label">HTML（只要 body 內容）</span>
         <textarea
           v-model="html"
           class="pixel-input mono"
@@ -128,9 +149,8 @@ onUnmounted(() => {
         ></textarea>
       </label>
 
-      <!-- CSS 輸入 -->
       <label class="field tall">
-        <span class="label">CSS(選填)</span>
+        <span class="label">CSS</span>
         <textarea
           v-model="css"
           class="pixel-input mono"
@@ -142,16 +162,15 @@ onUnmounted(() => {
 
     <div class="row">
       <PixelButton variant="secondary" size="sm" @click="refreshPreview">
-        🔄 更新預覽
+        更新預覽
       </PixelButton>
 
       <label class="file-pill">
-        📂 匯入 .html
+        匯入 .html
         <input type="file" accept=".html,.htm,text/html" hidden @change="loadFromHtmlFile" />
       </label>
     </div>
 
-    <!-- 預覽 iframe -->
     <div class="preview-block">
       <h3>// 預覽</h3>
       <iframe
@@ -162,10 +181,9 @@ onUnmounted(() => {
       ></iframe>
     </div>
 
-    <!-- 輸出設定 -->
     <div class="grid">
       <label class="field">
-        <span class="label">紙張大小</span>
+        <span class="label">紙張</span>
         <select v-model="format" class="pixel-input">
           <option value="a4">A4</option>
           <option value="letter">Letter</option>
@@ -181,17 +199,17 @@ onUnmounted(() => {
         </select>
       </label>
       <label class="field">
-        <span class="label">邊界({{ margin }} mm)</span>
+        <span class="label">邊界（{{ margin }} mm）</span>
         <input v-model.number="margin" type="range" min="0" max="40" />
       </label>
       <label class="field">
-        <span class="label">解析度({{ scale }}x)</span>
+        <span class="label">縮放（{{ scale }}x）</span>
         <input v-model.number="scale" type="range" min="1" max="3" step="0.5" />
       </label>
     </div>
 
     <label class="field">
-      <span class="label">輸出檔名</span>
+      <span class="label">輸出名稱</span>
       <div class="filename-row">
         <input v-model="outputName" class="pixel-input" type="text" placeholder="document" />
         <span class="ext">.pdf</span>
@@ -200,13 +218,13 @@ onUnmounted(() => {
 
     <div class="actions">
       <PixelButton size="lg" :disabled="isProcessing" @click="generate">
-        {{ isProcessing ? '產生中…' : '💾 產生 PDF' }}
+        {{ isProcessing ? 'Generating...' : 'Download PDF' }}
       </PixelButton>
     </div>
 
     <p class="warn">
-      ⚠ 純前端 HTML → PDF 是「拍照成圖再嵌進 PDF」,文字無法選取(但版面 100% 準確)。
-      想要文字可選取的高品質輸出,目前還是要用 Chrome / Edge 的「列印 → 另存 PDF」最強。
+      提醒：HTML → PDF 是用瀏覽器把內容渲染成圖，再轉成 PDF。
+      如果內容太大或有外部資源沒載入完成，輸出可能會有差異。
     </p>
   </ToolLayout>
 </template>
@@ -333,3 +351,4 @@ onUnmounted(() => {
   line-height: 1.6;
 }
 </style>
+
