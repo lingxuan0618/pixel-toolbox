@@ -3,6 +3,7 @@ import { ref, shallowRef, watch, onUnmounted, nextTick, computed } from 'vue'
 import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib'
 import { pdfjsLib, type PDFDocumentProxy } from '../lib/pdfjs'
 import ToolLayout from '../components/ToolLayout.vue'
+import PdfToolTabs from '../components/PdfToolTabs.vue'
 import PixelButton from '../components/PixelButton.vue'
 import { downloadBlob } from '../lib/download'
 
@@ -292,7 +293,9 @@ async function apply() {
       updateMetadata: false,
     })
     const op = opacity.value / 100
-    const theta = (rotation.value * Math.PI) / 180
+    // CSS 的正角度和 PDF 座標的正角度方向不同,這裡反向一次讓匯出跟預覽一致
+    const pdfRotation = -rotation.value
+    const theta = (pdfRotation * Math.PI) / 180
     const cos = Math.cos(theta)
     const sin = Math.sin(theta)
 
@@ -310,14 +313,14 @@ async function apply() {
         // 找文字左下角位置,使得它「整塊」旋轉後中心對齊 (cxPdf, cyPdf)
         const x = cxPdf - (tw / 2) * cos + (th / 2) * sin
         const y = cyPdf - (tw / 2) * sin - (th / 2) * cos
-        page.drawText(text.value, {
-          x, y,
-          size: fs,
-          font,
-          color: c,
-          opacity: op,
-          rotate: degrees(rotation.value),
-        })
+          page.drawText(text.value, {
+            x, y,
+            size: fs,
+            font,
+            color: c,
+            opacity: op,
+            rotate: degrees(pdfRotation),
+          })
       }
     } else {
       const imgBytes = await imageFile.value!.arrayBuffer()
@@ -346,12 +349,12 @@ async function apply() {
         const cyPdf = ph * (1 - yRatio.value)
         const x = cxPdf - (iw / 2) * cos + (ih / 2) * sin
         const y = cyPdf - (iw / 2) * sin - (ih / 2) * cos
-        page.drawImage(embedded, {
-          x, y,
-          width: iw, height: ih,
-          rotate: degrees(rotation.value),
-          opacity: op,
-        })
+          page.drawImage(embedded, {
+            x, y,
+            width: iw, height: ih,
+            rotate: degrees(pdfRotation),
+            opacity: op,
+          })
       }
     }
 
@@ -379,6 +382,8 @@ onUnmounted(() => {
     icon="💧"
     description="文字或圖片浮水印。預設位置點一下就到位,然後可以自由拖移、縮放、旋轉。會套用到所有頁面。"
   >
+    <PdfToolTabs current="/pdf-watermark" />
+
     <div
       v-if="!pdfFile"
       class="dropzone"
