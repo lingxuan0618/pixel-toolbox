@@ -114,21 +114,21 @@ h3 {
 }
 
 /* === 手機:緊湊兩欄,只留 icon + 名稱 === */
-@media (max-width: 640px) {
+@media (max-width: 900px) {
   .hero h1 {
-    font-size: 20px;
+    font-size: 22px;
   }
   .tool-grid {
     grid-template-columns: 1fr;
-    gap: 12px;
+    gap: 14px;
   }
   .tool-icon {
-    font-size: 34px;
-    margin-bottom: 10px;
+    font-size: 36px;
+    margin-bottom: 12px;
     text-align: center;
   }
   h3 {
-    font-size: 13px;
+    font-size: 14px;
     margin: 0;
     text-align: center;
   }
@@ -141,11 +141,24 @@ h3 {
   }
   /* 把卡片的內距調大一點，手機上看起來比較完整 */
   .tool-link :deep(.pixel-card-component) {
-    padding: 18px 14px;
+    padding: 20px 16px;
     box-shadow: 4px 4px 0 0 var(--shadow);
   }
   .tool-link :deep(.pixel-card-component.hoverable:hover) {
     box-shadow: 6px 6px 0 0 var(--shadow);
+  }
+}
+
+@media (max-width: 480px) {
+  .hero h1 {
+    font-size: 20px;
+  }
+  .tool-link :deep(.pixel-card-component) {
+    padding: 18px 14px;
+  }
+  .tool-icon {
+    font-size: 34px;
+    margin-bottom: 10px;
   }
 }
 </style>
