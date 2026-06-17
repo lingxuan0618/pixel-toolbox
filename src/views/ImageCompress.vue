@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import imageCompression from 'browser-image-compression'
 import JSZip from 'jszip'
 import ToolLayout from '../components/ToolLayout.vue'
@@ -9,8 +9,10 @@ import { downloadBlob, readableSize } from '../lib/download'
 interface Entry {
   id: string
   file: File
-  status: 'pending' | 'done' | 'error'
+  thumbUrl: string
+  status: 'pending' | 'processing' | 'done' | 'error'
   outFile?: File
+  outUrl?: string
   errMsg?: string
 }
 
@@ -21,6 +23,11 @@ const isProcessing = ref(false)
 const dropActive = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const globalErr = ref<string | null>(null)
+const processedCount = ref(0)
+const progressText = computed(() => {
+  if (!isProcessing.value) return '🚀 開始壓縮'
+  return `壓縮中… (${processedCount.value}/${entries.value.length})`
+})
 
 function handleFiles(list: FileList) {
   for (const f of Array.from(list)) {
@@ -28,7 +35,12 @@ function handleFiles(list: FileList) {
       globalErr.value = `${f.name} 不是圖片,已跳過`
       continue
     }
-    entries.value.push({ id: crypto.randomUUID(), file: f, status: 'pending' })
+    entries.value.push({
+      id: crypto.randomUUID(),
+      file: f,
+      thumbUrl: URL.createObjectURL(f),
+      status: 'pending',
+    })
   }
 }
 function onFileChange(e: Event) {
@@ -42,9 +54,16 @@ function onDrop(e: DragEvent) {
   if (e.dataTransfer?.files) handleFiles(e.dataTransfer.files)
 }
 function remove(id: string) {
+  const entry = entries.value.find(x => x.id === id)
+  if (entry?.thumbUrl) URL.revokeObjectURL(entry.thumbUrl)
+  if (entry?.outUrl) URL.revokeObjectURL(entry.outUrl)
   entries.value = entries.value.filter(x => x.id !== id)
 }
 function clearAll() {
+  entries.value.forEach(e => {
+    URL.revokeObjectURL(e.thumbUrl)
+    if (e.outUrl) URL.revokeObjectURL(e.outUrl)
+  })
   entries.value = []
   globalErr.value = null
 }
@@ -53,19 +72,24 @@ async function compressAll() {
   if (entries.value.length === 0) return
   isProcessing.value = true
   globalErr.value = null
+  processedCount.value = 0
   for (const e of entries.value) {
-    if (e.status === 'done') continue
     try {
+      e.status = 'processing'
       const out = await imageCompression(e.file, {
         maxSizeMB: targetSizeMB.value,
         maxWidthOrHeight: maxDim.value,
         useWebWorker: true,
       })
+      if (e.outUrl) URL.revokeObjectURL(e.outUrl)
       e.outFile = out
+      e.outUrl = URL.createObjectURL(out)
       e.status = 'done'
     } catch (err: unknown) {
       e.status = 'error'
       e.errMsg = err instanceof Error ? err.message : '未知錯誤'
+    } finally {
+      processedCount.value += 1
     }
   }
   isProcessing.value = false
@@ -86,6 +110,13 @@ async function downloadAllZip() {
   const out = await zip.generateAsync({ type: 'blob' })
   downloadBlob(out, 'compressed_images.zip')
 }
+
+onUnmounted(() => {
+  entries.value.forEach(e => {
+    URL.revokeObjectURL(e.thumbUrl)
+    if (e.outUrl) URL.revokeObjectURL(e.outUrl)
+  })
+})
 </script>
 
 <template>
@@ -131,6 +162,9 @@ async function downloadAllZip() {
 
       <ul class="list">
         <li v-for="e in entries" :key="e.id" class="row">
+          <div class="preview">
+            <img :src="e.thumbUrl" :alt="e.file.name" />
+          </div>
           <div class="info">
             <div class="name">{{ e.file.name }}</div>
             <div class="meta">
@@ -142,6 +176,10 @@ async function downloadAllZip() {
               <span v-if="e.status === 'error'" class="row-err"> ✗ {{ e.errMsg }}</span>
             </div>
           </div>
+          <div class="result-preview">
+            <img v-if="e.outUrl" :src="e.outUrl" :alt="`${e.file.name} 壓縮後`" />
+            <span v-else>預覽</span>
+          </div>
           <PixelButton v-if="e.status === 'done'" size="sm" @click="downloadOne(e)">⬇</PixelButton>
           <button class="ib danger" @click="remove(e.id)">✕</button>
         </li>
@@ -149,7 +187,7 @@ async function downloadAllZip() {
 
       <div class="actions">
         <PixelButton size="lg" :disabled="isProcessing" @click="compressAll">
-          {{ isProcessing ? '壓縮中…' : '🚀 開始壓縮' }}
+          {{ progressText }}
         </PixelButton>
         <PixelButton
           variant="secondary"
@@ -226,6 +264,27 @@ async function downloadAllZip() {
   border: 3px solid var(--border);
   box-shadow: 4px 4px 0 0 var(--shadow);
 }
+.preview,
+.result-preview {
+  width: 64px;
+  height: 64px;
+  flex: 0 0 64px;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.preview img,
+.result-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.result-preview {
+  font-size: 10px;
+  color: var(--text-dim);
+}
 .info {
   flex: 1;
   min-width: 0;
@@ -245,6 +304,9 @@ async function downloadAllZip() {
 }
 .row-err {
   color: var(--danger);
+}
+.status-processing {
+  color: var(--accent);
 }
 .ib {
   width: 36px;
