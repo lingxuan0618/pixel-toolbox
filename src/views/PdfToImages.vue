@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, ref, shallowRef } from 'vue'
 import JSZip from 'jszip'
 import { pdfjsLib } from '../lib/pdfjs'
@@ -20,103 +20,123 @@ const dropActive = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const outputName = ref('images')
 const fileLabel = computed(() => pdfFile.value?.name ?? '')
+const progressPercent = computed(() =>
+  totalPages.value > 0 ? Math.round((progress.value / totalPages.value) * 100) : 0,
+)
 
-async function handleFile(f: File) {
-  if (f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) {
-    error.value = '?芣??PDF'
+async function handleFile(file: File) {
+  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+    error.value = '請選擇 PDF 檔案。'
     return
   }
+
   error.value = null
-  pdfFile.value = f
-  // 皜?銋?????
-  generated.value.forEach(g => URL.revokeObjectURL(g.url))
+  pdfFile.value = file
+  generated.value.forEach((item) => URL.revokeObjectURL(item.url))
   generated.value = []
-  const ab = await f.arrayBuffer()
-  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(ab) }).promise
+
+  const buffer = await file.arrayBuffer()
+  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise
   totalPages.value = doc.numPages
   doc.destroy()
 }
 
 function onFileChange(e: Event) {
-  const f = (e.target as HTMLInputElement).files?.[0]
-  if (f) handleFile(f)
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (file) void handleFile(file)
   ;(e.target as HTMLInputElement).value = ''
 }
 
 function onDrop(e: DragEvent) {
   e.preventDefault()
   dropActive.value = false
-  const f = e.dataTransfer?.files?.[0]
-  if (f) handleFile(f)
+  const file = e.dataTransfer?.files?.[0]
+  if (file) void handleFile(file)
 }
 
 async function convertAll() {
   if (!pdfFile.value) return
+
   isProcessing.value = true
   error.value = null
   progress.value = 0
-  generated.value.forEach(g => URL.revokeObjectURL(g.url))
+  generated.value.forEach((item) => URL.revokeObjectURL(item.url))
   generated.value = []
+
   try {
-    const ab = await pdfFile.value.arrayBuffer()
-    const doc = await pdfjsLib.getDocument({ data: new Uint8Array(ab) }).promise
+    const buffer = await pdfFile.value.arrayBuffer()
+    const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise
     const results: { url: string; pageNum: number }[] = []
-    for (let i = 1; i <= doc.numPages; i++) {
-      const page = await doc.getPage(i)
+
+    for (let pageNum = 1; pageNum <= doc.numPages; pageNum += 1) {
+      const page = await doc.getPage(pageNum)
       const viewport = page.getViewport({ scale: scale.value })
       const canvas = document.createElement('canvas')
       canvas.width = viewport.width
       canvas.height = viewport.height
-      const ctx = canvas.getContext('2d')!
+      const ctx = canvas.getContext('2d')
+
+      if (!ctx) throw new Error('無法建立繪圖環境。')
+
       await page.render({ canvas, canvasContext: ctx, viewport }).promise
+
       const mime = format.value === 'png' ? 'image/png' : 'image/jpeg'
       const q = format.value === 'jpeg' ? quality.value / 100 : undefined
       const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob(b => (b ? resolve(b) : reject(new Error('toBlob failed'))), mime, q)
+        canvas.toBlob(
+          (output) => (output ? resolve(output) : reject(new Error('圖片輸出失敗。'))),
+          mime,
+          q,
+        )
       })
-      results.push({ url: URL.createObjectURL(blob), pageNum: i })
-      progress.value = i
+
+      results.push({ url: URL.createObjectURL(blob), pageNum })
+      progress.value = pageNum
     }
+
     doc.destroy()
     generated.value = results
-  } catch (e: unknown) {
-    error.value = '頧?憭望?:' + (e instanceof Error ? e.message : '?芰?航炊')
+  } catch (err: unknown) {
+    error.value = `轉換失敗：${err instanceof Error ? err.message : '未知錯誤'}`
   } finally {
     isProcessing.value = false
   }
 }
 
-async function downloadOne(g: { url: string; pageNum: number }) {
-  const blob = await fetch(g.url).then(r => r.blob())
+async function downloadOne(item: { url: string; pageNum: number }) {
+  const blob = await fetch(item.url).then((response) => response.blob())
   const base = outputName.value.trim() || pdfFile.value!.name.replace(/\.pdf$/i, '')
-  downloadBlob(blob, `${base}_p${g.pageNum}.${format.value}`)
+  downloadBlob(blob, `${base}_p${item.pageNum}.${format.value}`)
 }
 
 async function downloadAllZip() {
   if (generated.value.length === 0) return
   const zip = new JSZip()
   const base = outputName.value.trim() || pdfFile.value!.name.replace(/\.pdf$/i, '')
-  for (const g of generated.value) {
-    const blob = await fetch(g.url).then(r => r.blob())
-    zip.file(`${base}_p${g.pageNum}.${format.value}`, blob)
+
+  for (const item of generated.value) {
+    const blob = await fetch(item.url).then((response) => response.blob())
+    zip.file(`${base}_p${item.pageNum}.${format.value}`, blob)
   }
-  const out = await zip.generateAsync({ type: 'blob' })
-  downloadBlob(out, `${base}_images.zip`)
+
+  const output = await zip.generateAsync({ type: 'blob' })
+  downloadBlob(output, `${base}_images.zip`)
 }
 
 function reset() {
-  generated.value.forEach(g => URL.revokeObjectURL(g.url))
+  generated.value.forEach((item) => URL.revokeObjectURL(item.url))
   generated.value = []
   pdfFile.value = null
   totalPages.value = 0
+  progress.value = 0
 }
 </script>
 
 <template>
   <ToolLayout
     title="PDF 轉圖片"
-    icon="🖼️"
-    description="把 PDF 每一頁轉成 JPG / PNG，支援解析度與批次下載。"
+    icon="PDF"
+    description="把 PDF 每一頁轉成 JPG 或 PNG，支援解析度、品質與批次下載。"
   >
     <PdfToolTabs current="/pdf-to-images" />
 
@@ -129,7 +149,7 @@ function reset() {
       @dragleave="dropActive = false"
       @drop="onDrop"
     >
-      <div class="dz-icon">📄</div>
+      <div class="dz-icon">PDF</div>
       <p>點這裡或把 PDF 拖進來</p>
       <input
         ref="fileInput"
@@ -171,9 +191,19 @@ function reset() {
         </label>
       </div>
 
+      <div v-if="isProcessing || generated.length > 0" class="progress-wrap">
+        <div class="progress-head">
+          <span>{{ isProcessing ? `轉換中（${progress}/${totalPages}）` : '已完成' }}</span>
+          <span>{{ progressPercent }}%</span>
+        </div>
+        <div class="progress-track" role="progressbar" :aria-valuenow="progressPercent" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-fill" :style="{ width: `${progressPercent}%` }"></div>
+        </div>
+      </div>
+
       <div class="actions">
         <PixelButton size="lg" :disabled="isProcessing" @click="convertAll">
-          {{ isProcessing ? `轉換中… (${progress}/${totalPages})` : '開始轉換' }}
+          {{ isProcessing ? '轉換中…' : '開始轉換' }}
         </PixelButton>
         <PixelButton variant="danger" size="sm" @click="reset">
           重新選檔
@@ -182,14 +212,14 @@ function reset() {
 
       <div v-if="generated.length > 0" class="results">
         <div class="results-bar">
-          <h3>// 結果（{{ generated.length }} 張）</h3>
+          <h3>轉換結果（{{ generated.length }} 張）</h3>
           <PixelButton size="sm" @click="downloadAllZip">全部打包下載 (ZIP)</PixelButton>
         </div>
         <div class="grid-preview">
-          <div v-for="g in generated" :key="g.pageNum" class="thumb">
-            <img :src="g.url" :alt="`page ${g.pageNum}`" />
-            <button class="thumb-dl" type="button" @click="downloadOne(g)">
-              P.{{ g.pageNum }} ⬇
+          <div v-for="item in generated" :key="item.pageNum" class="thumb">
+            <img :src="item.url" :alt="`第 ${item.pageNum} 頁`" />
+            <button class="thumb-dl" type="button" @click="downloadOne(item)">
+              第 {{ item.pageNum }} 頁下載
             </button>
           </div>
         </div>
@@ -206,14 +236,18 @@ function reset() {
   cursor: pointer;
   background: var(--surface);
 }
+
 .dropzone:hover,
 .dropzone.active {
   background: color-mix(in srgb, var(--accent) 8%, var(--surface));
 }
+
 .dz-icon {
-  font-size: 56px;
+  font-size: 40px;
   margin-bottom: 12px;
+  letter-spacing: 0;
 }
+
 .err {
   color: var(--danger);
   border: 3px solid var(--danger);
@@ -221,11 +255,13 @@ function reset() {
   margin: 16px 0;
   font-size: 12px;
 }
+
 .form {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
+
 .file-row {
   padding: 12px;
   background: var(--surface);
@@ -233,19 +269,23 @@ function reset() {
   box-shadow: 4px 4px 0 0 var(--shadow);
   font-size: 11px;
 }
+
 .field {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
+
 .label {
   font-size: 10px;
   color: var(--accent-2);
 }
+
 .help {
   font-size: 10px;
   color: var(--text-dim);
 }
+
 .pixel-input {
   font-family: inherit;
   font-size: 13px;
@@ -255,11 +295,40 @@ function reset() {
   border: 3px solid var(--border);
   outline: none;
 }
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 16px;
 }
+
+.progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.progress-track {
+  width: 100%;
+  height: 14px;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+}
+
 .actions {
   display: flex;
   gap: 12px;
@@ -267,6 +336,7 @@ function reset() {
   padding-top: 12px;
   border-top: 3px dashed var(--border);
 }
+
 .results-bar {
   display: flex;
   justify-content: space-between;
@@ -275,16 +345,19 @@ function reset() {
   gap: 12px;
   margin-top: 16px;
 }
+
 .results h3 {
   color: var(--accent);
   margin: 0;
 }
+
 .grid-preview {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 12px;
   margin-top: 12px;
 }
+
 .thumb {
   background: var(--surface);
   border: 3px solid var(--border);
@@ -292,11 +365,13 @@ function reset() {
   display: flex;
   flex-direction: column;
 }
+
 .thumb img {
   width: 100%;
   height: auto;
   display: block;
 }
+
 .thumb-dl {
   font-family: inherit;
   font-size: 10px;
@@ -307,5 +382,3 @@ function reset() {
   cursor: pointer;
 }
 </style>
-
-

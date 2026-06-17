@@ -11,16 +11,16 @@ defineProps<{
 }>()
 
 const tabs: Tab[] = [
-  { label: '工作台', to: '/pdf-pages' },
-  { label: '合併', to: '/pdf-merge' },
-  { label: '拆分', to: '/pdf-split' },
-  { label: '浮水印', to: '/pdf-watermark' },
-  { label: '轉圖片', to: '/pdf-to-images' },
+  { label: 'PDF 頁面工具', to: '/pdf-pages' },
+  { label: '合併 PDF', to: '/pdf-merge' },
+  { label: '拆分 PDF', to: '/pdf-split' },
+  { label: '加浮水印', to: '/pdf-watermark' },
+  { label: 'PDF 轉圖片', to: '/pdf-to-images' },
 ]
 </script>
 
 <template>
-  <nav class="pdf-tabs" aria-label="PDF 工具導覽">
+  <nav class="pdf-tabs" aria-label="PDF 工具分頁">
     <RouterLink
       v-for="tab in tabs"
       :key="tab.to"
@@ -54,6 +54,7 @@ const tabs: Tab[] = [
   border-bottom: none;
   font-size: 11px;
   text-decoration: none;
+  white-space: nowrap;
 }
 
 .pdf-tab.active {

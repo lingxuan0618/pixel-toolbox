@@ -27,16 +27,21 @@ const processedCount = ref(0)
 const preview = ref<{ src: string; title: string } | null>(null)
 
 const progressText = computed(() => {
-  if (!isProcessing.value) return '開始壓縮'
-  return `壓縮中… (${processedCount.value}/${entries.value.length})`
+  if (!isProcessing.value) return '等待開始壓縮'
+  return `壓縮中（${processedCount.value}/${entries.value.length}）`
 })
+
+const progressPercent = computed(() =>
+  entries.value.length > 0 ? Math.round((processedCount.value / entries.value.length) * 100) : 0,
+)
 
 function handleFiles(list: FileList) {
   for (const file of Array.from(list)) {
     if (!/^image\//i.test(file.type)) {
-      globalErr.value = `${file.name} 不是圖片，已跳過`
+      globalErr.value = `${file.name} 不是支援的圖片格式。`
       continue
     }
+
     entries.value.push({
       id: crypto.randomUUID(),
       file,
@@ -47,9 +52,9 @@ function handleFiles(list: FileList) {
 }
 
 function onFileChange(e: Event) {
-  const fl = (e.target as HTMLInputElement).files
-  if (fl) handleFiles(fl)
-  ;(e.target as HTMLInputElement).value = ''
+  const input = e.target as HTMLInputElement
+  if (input.files) handleFiles(input.files)
+  input.value = ''
 }
 
 function onDrop(e: DragEvent) {
@@ -67,10 +72,10 @@ function closePreview() {
 }
 
 function remove(id: string) {
-  const entry = entries.value.find((x) => x.id === id)
+  const entry = entries.value.find((item) => item.id === id)
   if (entry?.thumbUrl) URL.revokeObjectURL(entry.thumbUrl)
   if (entry?.outUrl) URL.revokeObjectURL(entry.outUrl)
-  entries.value = entries.value.filter((x) => x.id !== id)
+  entries.value = entries.value.filter((item) => item.id !== id)
 }
 
 function clearAll() {
@@ -81,10 +86,12 @@ function clearAll() {
   entries.value = []
   globalErr.value = null
   preview.value = null
+  processedCount.value = 0
 }
 
 async function compressAll() {
   if (entries.value.length === 0) return
+
   isProcessing.value = true
   globalErr.value = null
   processedCount.value = 0
@@ -92,18 +99,19 @@ async function compressAll() {
   for (const entry of entries.value) {
     try {
       entry.status = 'processing'
-      const out = await imageCompression(entry.file, {
+      const output = await imageCompression(entry.file, {
         maxSizeMB: targetSizeMB.value,
         maxWidthOrHeight: maxDim.value,
         useWebWorker: true,
       })
+
       if (entry.outUrl) URL.revokeObjectURL(entry.outUrl)
-      entry.outFile = out
-      entry.outUrl = URL.createObjectURL(out)
+      entry.outFile = output
+      entry.outUrl = URL.createObjectURL(output)
       entry.status = 'done'
     } catch (err: unknown) {
       entry.status = 'error'
-      entry.errMsg = err instanceof Error ? err.message : '未知錯誤'
+      entry.errMsg = err instanceof Error ? err.message : '圖片壓縮失敗。'
     } finally {
       processedCount.value += 1
     }
@@ -120,12 +128,14 @@ function downloadOne(entry: Entry) {
 async function downloadAllZip() {
   const done = entries.value.filter((entry) => entry.status === 'done' && entry.outFile)
   if (done.length === 0) return
+
   const zip = new JSZip()
   for (const entry of done) {
     zip.file(`compressed_${entry.file.name}`, entry.outFile!)
   }
-  const out = await zip.generateAsync({ type: 'blob' })
-  downloadBlob(out, 'compressed_images.zip')
+
+  const output = await zip.generateAsync({ type: 'blob' })
+  downloadBlob(output, 'compressed_images.zip')
 }
 
 onUnmounted(() => {
@@ -139,8 +149,8 @@ onUnmounted(() => {
 <template>
   <ToolLayout
     title="圖片壓縮"
-    icon="🗜️"
-    description="批次壓縮圖片，保留原圖與壓縮後預覽，縮圖可點開燈箱查看。"
+    icon="IMG"
+    description="批次壓縮圖片，控制目標容量與最大邊長。"
   >
     <div
       class="dropzone"
@@ -150,9 +160,9 @@ onUnmounted(() => {
       @dragleave="dropActive = false"
       @drop="onDrop"
     >
-      <div class="dz-icon">🖼️</div>
-      <p>{{ entries.length === 0 ? '點這裡或把圖片拖進來' : '繼續加入更多圖片' }}</p>
-      <p class="sub">支援多選，壓縮前後都能預覽。</p>
+      <div class="dz-icon">IMG</div>
+      <p>{{ entries.length === 0 ? '點這裡或拖曳圖片進來' : '可繼續加入更多圖片' }}</p>
+      <p class="sub">支援 JPG、PNG、WebP、BMP、GIF。</p>
       <input
         ref="fileInput"
         type="file"
@@ -168,13 +178,23 @@ onUnmounted(() => {
     <div v-if="entries.length > 0" class="settings">
       <div class="grid">
         <label class="field">
-          <span class="label">目標大小：{{ targetSizeMB }} MB</span>
+          <span class="label">目標容量（{{ targetSizeMB }} MB）</span>
           <input v-model.number="targetSizeMB" type="range" min="0.1" max="10" step="0.1" />
         </label>
         <label class="field">
-          <span class="label">最大邊長：{{ maxDim }} px</span>
+          <span class="label">最大邊長（{{ maxDim }} px）</span>
           <input v-model.number="maxDim" type="range" min="640" max="4096" step="160" />
         </label>
+      </div>
+
+      <div v-if="isProcessing || processedCount > 0" class="progress-wrap">
+        <div class="progress-head">
+          <span>{{ progressText }}</span>
+          <span>{{ progressPercent }}%</span>
+        </div>
+        <div class="progress-track" role="progressbar" :aria-valuenow="progressPercent" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-fill" :style="{ width: `${progressPercent}%` }"></div>
+        </div>
       </div>
 
       <ul class="list">
@@ -194,10 +214,12 @@ onUnmounted(() => {
               {{ readableSize(entry.file.size) }}
               <span v-if="entry.status === 'done' && entry.outFile">
                 → {{ readableSize(entry.outFile.size) }}
-                <span class="ratio">({{ Math.round((entry.outFile.size / entry.file.size) * 100) }}%)</span>
+                <span class="ratio">
+                  ({{ Math.round((entry.outFile.size / entry.file.size) * 100) }}%)
+                </span>
               </span>
-              <span v-if="entry.status === 'error'" class="row-err">失敗：{{ entry.errMsg }}</span>
-              <span v-if="entry.status === 'processing'" class="status-processing">處理中</span>
+              <span v-if="entry.status === 'error'" class="row-err"> {{ entry.errMsg }}</span>
+              <span v-if="entry.status === 'processing'" class="row-state"> 處理中</span>
             </div>
           </div>
 
@@ -205,23 +227,23 @@ onUnmounted(() => {
             type="button"
             class="result-preview"
             :disabled="!entry.outUrl"
-            :title="entry.outUrl ? '點擊放大預覽' : '尚未完成壓縮'"
+            :title="entry.outUrl ? '查看壓縮後結果' : '尚未完成壓縮'"
             @click="entry.outUrl && openPreview(entry.outUrl, `壓縮後 - ${entry.file.name}`)"
           >
-            <img v-if="entry.outUrl" :src="entry.outUrl" :alt="`${entry.file.name} 壓縮後`" />
-            <span v-else>尚未</span>
+            <img v-if="entry.outUrl" :src="entry.outUrl" :alt="`${entry.file.name} 壓縮後預覽`" />
+            <span v-else>未完成</span>
           </button>
 
           <PixelButton v-if="entry.status === 'done'" size="sm" @click="downloadOne(entry)">
-            ⬇
+            下載
           </PixelButton>
-          <button class="ib danger" type="button" @click="remove(entry.id)">✕</button>
+          <button class="ib danger" type="button" @click="remove(entry.id)">刪</button>
         </li>
       </ul>
 
       <div class="actions">
         <PixelButton size="lg" :disabled="isProcessing" @click="compressAll">
-          {{ progressText }}
+          {{ isProcessing ? '壓縮中…' : '開始壓縮' }}
         </PixelButton>
         <PixelButton
           variant="secondary"
@@ -229,9 +251,9 @@ onUnmounted(() => {
           :disabled="!entries.some((entry) => entry.status === 'done')"
           @click="downloadAllZip"
         >
-          全部打包 (ZIP)
+          全部下載 (ZIP)
         </PixelButton>
-        <PixelButton variant="secondary" size="sm" @click="clearAll">清除</PixelButton>
+        <PixelButton variant="secondary" size="sm" @click="clearAll">清空</PixelButton>
       </div>
     </div>
 
@@ -239,7 +261,7 @@ onUnmounted(() => {
       <div class="lightbox-panel">
         <div class="lightbox-bar">
           <span class="lightbox-title">{{ preview.title }}</span>
-          <button type="button" class="lightbox-close" @click="closePreview">✕</button>
+          <button type="button" class="lightbox-close" @click="closePreview">關閉</button>
         </div>
         <img class="lightbox-img" :src="preview.src" :alt="preview.title" />
       </div>
@@ -255,17 +277,23 @@ onUnmounted(() => {
   cursor: pointer;
   background: var(--surface);
 }
+
 .dropzone:hover,
 .dropzone.active {
   background: color-mix(in srgb, var(--accent) 8%, var(--surface));
 }
+
 .dz-icon {
-  font-size: 48px;
+  font-size: 40px;
+  margin-bottom: 12px;
+  letter-spacing: 0;
 }
+
 .sub {
   font-size: 10px;
   color: var(--text-dim);
 }
+
 .err {
   color: var(--danger);
   border: 3px solid var(--danger);
@@ -273,26 +301,31 @@ onUnmounted(() => {
   margin: 16px 0;
   font-size: 12px;
 }
+
 .settings {
   margin-top: 16px;
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
 }
+
 .field {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
+
 .label {
   font-size: 10px;
   color: var(--accent-2);
 }
+
 .list {
   list-style: none;
   padding: 0;
@@ -301,6 +334,34 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 8px;
 }
+
+.progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.progress-track {
+  width: 100%;
+  height: 14px;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+}
+
 .row {
   display: flex;
   align-items: center;
@@ -310,6 +371,7 @@ onUnmounted(() => {
   border: 3px solid var(--border);
   box-shadow: 4px 4px 0 0 var(--shadow);
 }
+
 .preview,
 .result-preview {
   width: 64px;
@@ -323,6 +385,7 @@ onUnmounted(() => {
   padding: 0;
   cursor: pointer;
 }
+
 .preview img,
 .result-preview img {
   width: 100%;
@@ -330,37 +393,46 @@ onUnmounted(() => {
   object-fit: cover;
   display: block;
 }
+
 .result-preview {
   font-size: 10px;
   color: var(--text-dim);
 }
+
 .result-preview:disabled {
   cursor: not-allowed;
   opacity: 0.6;
 }
+
 .info {
   flex: 1;
   min-width: 0;
 }
+
 .name {
   font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .meta {
   font-size: 10px;
   color: var(--text-dim);
 }
+
 .ratio {
   color: var(--success);
 }
+
 .row-err {
   color: var(--danger);
 }
-.status-processing {
+
+.row-state {
   color: var(--accent);
 }
+
 .ib {
   width: 36px;
   height: 36px;
@@ -369,10 +441,12 @@ onUnmounted(() => {
   cursor: pointer;
   font-family: inherit;
 }
+
 .ib.danger:hover {
   background: var(--danger);
   color: var(--p8-white);
 }
+
 .actions {
   display: flex;
   gap: 12px;
@@ -380,6 +454,7 @@ onUnmounted(() => {
   padding-top: 12px;
   border-top: 3px dashed var(--border);
 }
+
 .lightbox {
   position: fixed;
   inset: 0;
@@ -390,6 +465,7 @@ onUnmounted(() => {
   padding: 16px;
   z-index: 30;
 }
+
 .lightbox-panel {
   width: min(92vw, 980px);
   max-height: 92vh;
@@ -399,6 +475,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
 }
+
 .lightbox-bar {
   display: flex;
   justify-content: space-between;
@@ -407,20 +484,24 @@ onUnmounted(() => {
   padding: 10px 12px;
   border-bottom: 3px dashed var(--border);
 }
+
 .lightbox-title {
   font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .lightbox-close {
-  width: 32px;
-  height: 32px;
+  width: auto;
+  min-height: 32px;
+  padding: 0 10px;
   border: 2px solid var(--border);
   background: var(--bg);
   cursor: pointer;
   font-family: inherit;
 }
+
 .lightbox-img {
   width: 100%;
   max-height: calc(92vh - 56px);

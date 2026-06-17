@@ -10,8 +10,17 @@ export const router = createRouter({
       name: 'home',
       component: () => import('../views/Home.vue'),
       meta: {
-        title: 'Pixel Toolbox · 像素風線上工具箱',
-        description: 'Pixel Toolbox 是一個全離線的像素風線上工具箱，提供 PDF、圖片、HEIC、QR Code 與色票等常用工具。',
+        title: 'Pixel Toolbox',
+        description: '一組直接在瀏覽器內使用的 PDF 與圖片工具。',
+      },
+    },
+    {
+      path: '/pdf-pages',
+      name: 'pdf-pages',
+      component: () => import('../views/PdfPages.vue'),
+      meta: {
+        title: 'PDF 頁面工具 - Pixel Toolbox',
+        description: '合併、拆頁、調整順序、旋轉與刪除 PDF 頁面後再匯出。',
       },
     },
     {
@@ -19,8 +28,8 @@ export const router = createRouter({
       name: 'pdf-sign',
       component: () => import('../views/PdfSign.vue'),
       meta: {
-        title: 'PDF 簽名 · Pixel Toolbox',
-        description: '在瀏覽器內手寫或上傳圖片簽名，拖曳、縮放後直接套用到 PDF。',
+        title: 'PDF 簽名 - Pixel Toolbox',
+        description: '在 PDF 上加入簽名、文字或標記。',
       },
     },
     {
@@ -28,8 +37,8 @@ export const router = createRouter({
       name: 'pdf-merge',
       component: () => import('../views/PdfMerge.vue'),
       meta: {
-        title: 'PDF 合併 · Pixel Toolbox',
-        description: '把多份 PDF 排序後合併成單一檔案，完全在本機完成。',
+        title: 'PDF 合併 - Pixel Toolbox',
+        description: '把多個 PDF 合成一份，保留頁面順序。',
       },
     },
     {
@@ -37,8 +46,8 @@ export const router = createRouter({
       name: 'pdf-split',
       component: () => import('../views/PdfSplit.vue'),
       meta: {
-        title: 'PDF 拆分 · Pixel Toolbox',
-        description: '依頁碼範圍拆分 PDF，只保留你要的頁面並輸出新檔。',
+        title: 'PDF 拆分 - Pixel Toolbox',
+        description: '將 PDF 拆成單頁或指定頁段。',
       },
     },
     {
@@ -46,8 +55,8 @@ export const router = createRouter({
       name: 'pdf-watermark',
       component: () => import('../views/PdfWatermark.vue'),
       meta: {
-        title: 'PDF 加浮水印 · Pixel Toolbox',
-        description: '替 PDF 加上文字或圖片浮水印，支援拖移、旋轉與縮放。',
+        title: 'PDF 浮水印 - Pixel Toolbox',
+        description: '替 PDF 加上文字或圖片浮水印。',
       },
     },
     {
@@ -55,8 +64,8 @@ export const router = createRouter({
       name: 'pdf-to-images',
       component: () => import('../views/PdfToImages.vue'),
       meta: {
-        title: 'PDF → 圖片 · Pixel Toolbox',
-        description: '把 PDF 每一頁轉成圖片，支援格式、解析度與批次下載。',
+        title: 'PDF 轉圖片 - Pixel Toolbox',
+        description: '把 PDF 每一頁輸出成 JPG 或 PNG，支援解析度與批次下載。',
       },
     },
     {
@@ -64,8 +73,8 @@ export const router = createRouter({
       name: 'images-to-pdf',
       component: () => import('../views/ImagesToPdf.vue'),
       meta: {
-        title: '圖片 → PDF · Pixel Toolbox',
-        description: '把多張圖片合成一份 PDF，順序可調整，輸出完全在本機完成。',
+        title: '圖片轉 PDF - Pixel Toolbox',
+        description: '把多張圖片排成一份 PDF，方便列印與歸檔。',
       },
     },
     {
@@ -73,8 +82,8 @@ export const router = createRouter({
       name: 'heic-convert',
       component: () => import('../views/HeicConvert.vue'),
       meta: {
-        title: 'HEIC → JPG · Pixel Toolbox',
-        description: '把 iPhone 拍的 HEIC 批次轉成 JPG 或 PNG，完全離線。',
+        title: 'HEIC 轉 JPG - Pixel Toolbox',
+        description: '把 iPhone 拍的 HEIC 轉成 JPG 或 PNG。',
       },
       beforeEnter: () => {
         if (isAndroid()) return '/'
@@ -85,8 +94,8 @@ export const router = createRouter({
       name: 'image-convert',
       component: () => import('../views/ImageConvert.vue'),
       meta: {
-        title: '圖片格式互轉 · Pixel Toolbox',
-        description: 'JPG、PNG、WebP 互相轉換，支援批次處理與品質控制。',
+        title: '圖片格式轉換 - Pixel Toolbox',
+        description: 'JPG、PNG、WebP 互轉，支援批次處理。',
       },
     },
     {
@@ -94,8 +103,8 @@ export const router = createRouter({
       name: 'image-compress',
       component: () => import('../views/ImageCompress.vue'),
       meta: {
-        title: '圖片壓縮 · Pixel Toolbox',
-        description: '把圖片壓到更小的檔案大小，同時保留可看的品質。',
+        title: '圖片壓縮 - Pixel Toolbox',
+        description: '批次壓縮圖片，控制容量與尺寸。',
       },
     },
     {
@@ -103,8 +112,8 @@ export const router = createRouter({
       name: 'html-to-pdf',
       component: () => import('../views/HtmlToPdf.vue'),
       meta: {
-        title: 'HTML → PDF · Pixel Toolbox',
-        description: '貼上 HTML 與 CSS，自動分頁後輸出成 PDF。',
+        title: 'HTML 轉 PDF - Pixel Toolbox',
+        description: '把 HTML 頁面輸出成可下載的 PDF。',
       },
     },
     {
@@ -112,17 +121,8 @@ export const router = createRouter({
       name: 'md-to-pdf',
       component: () => import('../views/MarkdownToPdf.vue'),
       meta: {
-        title: 'Markdown → PDF / HTML · Pixel Toolbox',
-        description: '支援 GitHub 風格 Markdown，能轉成 PDF 或 HTML。',
-      },
-    },
-    {
-      path: '/pdf-pages',
-      name: 'pdf-pages',
-      component: () => import('../views/PdfPages.vue'),
-      meta: {
-        title: 'PDF 工作台 · Pixel Toolbox',
-        description: '把多份 PDF 的頁面放在同一頁選取、排序、旋轉後再輸出。',
+        title: 'Markdown 轉 PDF / HTML - Pixel Toolbox',
+        description: '把 GitHub Flavored Markdown 轉成 PDF 或 HTML。',
       },
     },
     {
@@ -130,8 +130,8 @@ export const router = createRouter({
       name: 'image-colors',
       component: () => import('../views/ImageColors.vue'),
       meta: {
-        title: '圖片取色 · Pixel Toolbox',
-        description: '從圖片萃取色票，或直接點圖選出任意顏色。',
+        title: '圖片取色 - Pixel Toolbox',
+        description: '從圖片抓出代表色與色碼。',
       },
     },
     {
@@ -139,8 +139,8 @@ export const router = createRouter({
       name: 'image-edit',
       component: () => import('../views/ImageEdit.vue'),
       meta: {
-        title: '圖片裁切縮放 · Pixel Toolbox',
-        description: '拖裁切框、調尺寸、轉方向，再輸出 PNG、JPG 或 WebP。',
+        title: '圖片編輯 - Pixel Toolbox',
+        description: '裁切、旋轉、調整大小，處理完直接下載。',
       },
     },
     {
@@ -148,8 +148,8 @@ export const router = createRouter({
       name: 'palette',
       component: () => import('../views/Palette.vue'),
       meta: {
-        title: '色票產生器 · Pixel Toolbox',
-        description: '輸入主色後自動產生六組配色，可下載 CSS 或 JSON。',
+        title: '色票產生器 - Pixel Toolbox',
+        description: '建立與管理常用色盤，支援匯出 JSON 與 CSS。',
       },
     },
     {
@@ -157,11 +157,10 @@ export const router = createRouter({
       name: 'qr-code',
       component: () => import('../views/QrCode.vue'),
       meta: {
-        title: 'QR Code · Pixel Toolbox',
-        description: '輸入文字或網址即時產生 QR Code，可下載 PNG 或 SVG。',
+        title: 'QR Code - Pixel Toolbox',
+        description: '輸入文字或網址，快速產生 QR Code。',
       },
     },
-    // 404 — 重新導向回首頁
     {
       path: '/:pathMatch(.*)*',
       redirect: '/',
@@ -172,12 +171,12 @@ export const router = createRouter({
   },
 })
 
-router.afterEach(to => {
-  const title = typeof to.meta.title === 'string' ? to.meta.title : 'Pixel Toolbox · 像素風線上工具箱'
+router.afterEach((to) => {
+  const title = typeof to.meta.title === 'string' ? to.meta.title : 'Pixel Toolbox'
   const description =
     typeof to.meta.description === 'string'
       ? to.meta.description
-      : 'Pixel Toolbox 是一個全離線的像素風線上工具箱。'
+      : '一組直接在瀏覽器內使用的 PDF 與圖片工具。'
 
   applySeo({
     title,

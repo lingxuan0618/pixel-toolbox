@@ -1,18 +1,19 @@
-﻿<script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue'
+<script setup lang="ts">
+import { computed, onUnmounted, ref } from 'vue'
 import ToolLayout from '../components/ToolLayout.vue'
 import PixelButton from '../components/PixelButton.vue'
 
 type Format = 'a4' | 'letter' | 'a3' | 'a5'
 type Orientation = 'portrait' | 'landscape'
 
-const html = ref(`<h1>璅?</h1>
-<p>?遙雿?HTML 鞎潮脖?,????撠望?霈? PDF??/p>
-<p>?舀 <strong>璅惜</strong>??em>璅??</em>?”?潦??柴????函雯? url 撘)??/p>
+const html = ref(`<h1>標題</h1>
+<p>這是 HTML 轉 PDF 的範例內容。你可以直接改成自己的 body 內容。</p>
+<p>也可以輸入 <strong>粗體</strong>、<em>斜體</em>、<code>code</code>。</p>
 <ul>
-  <li>? 1</li>
-  <li>? 2</li>
+  <li>項目 1</li>
+  <li>項目 2</li>
 </ul>`)
+
 const css = ref(`body {
   font-family: "Helvetica", "Microsoft JhengHei", sans-serif;
   font-size: 14px;
@@ -23,12 +24,12 @@ const css = ref(`body {
 h1 { color: #1d2b53; }
 table { border-collapse: collapse; width: 100%; }
 table td, table th { border: 1px solid #ccc; padding: 6px; }`)
+
 const format = ref<Format>('a4')
 const orientation = ref<Orientation>('portrait')
 const margin = ref(10)
 const scale = ref(2)
 const outputName = ref('document')
-
 const error = ref<string | null>(null)
 const isProcessing = ref(false)
 const previewSrc = ref<string>('')
@@ -37,13 +38,13 @@ const builtHtml = computed(() => {
   return `<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><style>${css.value}</style></head><body>${html.value}</body></html>`
 })
 
-
 function waitForFrame() {
   return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
 }
 
 async function waitForRender(target: HTMLElement) {
-  const fontReady = 'fonts' in document ? (document as Document & { fonts: FontFaceSet }).fonts.ready : Promise.resolve()
+  const fontReady =
+    'fonts' in document ? (document as Document & { fonts: FontFaceSet }).fonts.ready : Promise.resolve()
   const imageReady = Array.from(target.querySelectorAll('img')).map((img) =>
     img.complete
       ? Promise.resolve()
@@ -57,7 +58,6 @@ async function waitForRender(target: HTMLElement) {
 }
 
 function refreshPreview() {
-  // ??data: URI ? sandbox iframe ?汗
   const blob = new Blob([builtHtml.value], { type: 'text/html;charset=utf-8' })
   if (previewSrc.value) URL.revokeObjectURL(previewSrc.value)
   previewSrc.value = URL.createObjectURL(blob)
@@ -67,23 +67,21 @@ async function generate() {
   isProcessing.value = true
   error.value = null
   let wrap: HTMLDivElement | null = null
-  try {
-    // ??頛 html2pdf,?踹??? bundle 憭芸之
-    const { default: html2pdf } = await import('html2pdf.js') as any
 
-    // ??HTML ?暸脤敶Ｗ捆??html2canvas ???梯正?舀?
+  try {
+    const { default: html2pdf } = (await import('html2pdf.js')) as any
+
     wrap = document.createElement('div')
     wrap.style.position = 'fixed'
     wrap.style.left = '-9999px'
     wrap.style.top = '0'
-    wrap.style.width =
-      orientation.value === 'portrait' ? '794px' : '1123px' // A4 @ 96dpi
+    wrap.style.width = orientation.value === 'portrait' ? '794px' : '1123px'
     wrap.innerHTML = `<style>${css.value}</style>${html.value}`
     document.body.appendChild(wrap)
     await waitForRender(wrap)
 
     const fname = outputName.value.trim() || 'document'
-    const finalName = /\.pdf$/i.test(fname) ? fname : fname + '.pdf'
+    const finalName = /\.pdf$/i.test(fname) ? fname : `${fname}.pdf`
 
     await html2pdf()
       .set({
@@ -97,7 +95,7 @@ async function generate() {
       .from(wrap)
       .save()
   } catch (e: unknown) {
-    error.value = '?Ｙ?憭望?:' + (e instanceof Error ? e.message : '?芰?航炊')
+    error.value = `匯出失敗：${e instanceof Error ? e.message : '未知錯誤'}`
   } finally {
     if (wrap && wrap.parentNode) {
       wrap.parentNode.removeChild(wrap)
@@ -111,8 +109,7 @@ function loadFromHtmlFile(e: Event) {
   if (!f) return
   const reader = new FileReader()
   reader.onload = () => {
-    const text = reader.result as string
-    // ?賢 <style> ??<body>
+    const text = String(reader.result ?? '')
     const styleMatch = text.match(/<style[^>]*>([\s\S]*?)<\/style>/i)
     if (styleMatch) css.value = styleMatch[1].trim()
     const bodyMatch = text.match(/<body[^>]*>([\s\S]*?)<\/body>/i)
@@ -122,7 +119,6 @@ function loadFromHtmlFile(e: Event) {
   ;(e.target as HTMLInputElement).value = ''
 }
 
-// ????甈⊿?閬?
 refreshPreview()
 
 onUnmounted(() => {
@@ -351,4 +347,3 @@ onUnmounted(() => {
   line-height: 1.6;
 }
 </style>
-
