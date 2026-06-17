@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://lingxuan0618.github.io/pixel-toolbox/sitemap.xml
