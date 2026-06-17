@@ -1,5 +1,5 @@
-<script setup lang="ts">
-import { ref, shallowRef } from 'vue'
+﻿<script setup lang="ts">
+import { computed, ref, shallowRef } from 'vue'
 import JSZip from 'jszip'
 import { pdfjsLib } from '../lib/pdfjs'
 import ToolLayout from '../components/ToolLayout.vue'
@@ -18,15 +18,17 @@ const isProcessing = ref(false)
 const progress = ref(0)
 const dropActive = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
+const outputName = ref('images')
+const fileLabel = computed(() => pdfFile.value?.name ?? '')
 
 async function handleFile(f: File) {
   if (f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) {
-    error.value = '只接受 PDF'
+    error.value = '?芣??PDF'
     return
   }
   error.value = null
   pdfFile.value = f
-  // 清掉之前的結果
+  // 皜?銋?????
   generated.value.forEach(g => URL.revokeObjectURL(g.url))
   generated.value = []
   const ab = await f.arrayBuffer()
@@ -78,7 +80,7 @@ async function convertAll() {
     doc.destroy()
     generated.value = results
   } catch (e: unknown) {
-    error.value = '轉換失敗:' + (e instanceof Error ? e.message : '未知錯誤')
+    error.value = '頧?憭望?:' + (e instanceof Error ? e.message : '?芰?航炊')
   } finally {
     isProcessing.value = false
   }
@@ -86,14 +88,14 @@ async function convertAll() {
 
 async function downloadOne(g: { url: string; pageNum: number }) {
   const blob = await fetch(g.url).then(r => r.blob())
-  const base = pdfFile.value!.name.replace(/\.pdf$/i, '')
+  const base = outputName.value.trim() || pdfFile.value!.name.replace(/\.pdf$/i, '')
   downloadBlob(blob, `${base}_p${g.pageNum}.${format.value}`)
 }
 
 async function downloadAllZip() {
   if (generated.value.length === 0) return
   const zip = new JSZip()
-  const base = pdfFile.value!.name.replace(/\.pdf$/i, '')
+  const base = outputName.value.trim() || pdfFile.value!.name.replace(/\.pdf$/i, '')
   for (const g of generated.value) {
     const blob = await fetch(g.url).then(r => r.blob())
     zip.file(`${base}_p${g.pageNum}.${format.value}`, blob)
@@ -112,9 +114,9 @@ function reset() {
 
 <template>
   <ToolLayout
-    title="PDF → 圖片"
+    title="PDF 轉圖片"
     icon="🖼️"
-    description="把 PDF 每一頁轉成圖片,可選格式、品質、解析度。"
+    description="把 PDF 每一頁轉成 JPG / PNG，支援解析度與批次下載。"
   >
     <PdfToolTabs current="/pdf-to-images" />
 
@@ -127,8 +129,8 @@ function reset() {
       @dragleave="dropActive = false"
       @drop="onDrop"
     >
-      <div class="dz-icon">🖼️</div>
-      <p>點這裡或拖 PDF 進來</p>
+      <div class="dz-icon">📄</div>
+      <p>點這裡或把 PDF 拖進來</p>
       <input
         ref="fileInput"
         type="file"
@@ -141,32 +143,37 @@ function reset() {
     <p v-if="error" class="err">⚠ {{ error }}</p>
 
     <div v-if="pdfFile" class="form">
-      <div class="file-row">📄 {{ pdfFile.name }} · {{ totalPages }} 頁</div>
+      <div class="file-row">{{ fileLabel }} · {{ totalPages }} 頁</div>
 
       <div class="grid">
         <label class="field">
           <span class="label">輸出格式</span>
           <select v-model="format" class="pixel-input">
-            <option value="png">PNG(無損,檔較大)</option>
-            <option value="jpeg">JPEG(可壓縮)</option>
+            <option value="png">PNG（無損）</option>
+            <option value="jpeg">JPEG（可壓縮）</option>
           </select>
         </label>
 
         <label v-if="format === 'jpeg'" class="field">
-          <span class="label">JPEG 品質({{ quality }}%)</span>
+          <span class="label">JPEG 品質（{{ quality }}%）</span>
           <input v-model.number="quality" type="range" min="40" max="100" />
         </label>
 
         <label class="field">
-          <span class="label">解析度({{ scale }}x, 越高越清楚也越大)</span>
+          <span class="label">解析度（{{ scale }}x）</span>
           <input v-model.number="scale" type="range" min="1" max="4" step="0.5" />
-          <small class="help">1x 適合快速預覽, 2x 比較平衡, 4x 細節最多但檔案也最大。</small>
+          <small class="help">1x 適合快速預覽，2x 比較平衡，4x 細節最多但檔案也最大。</small>
+        </label>
+
+        <label class="field">
+          <span class="label">輸出名稱</span>
+          <input v-model="outputName" class="pixel-input" type="text" placeholder="images" />
         </label>
       </div>
 
       <div class="actions">
         <PixelButton size="lg" :disabled="isProcessing" @click="convertAll">
-          {{ isProcessing ? `轉換中… (${progress}/${totalPages})` : '🚀 開始轉換' }}
+          {{ isProcessing ? `轉換中… (${progress}/${totalPages})` : '開始轉換' }}
         </PixelButton>
         <PixelButton variant="danger" size="sm" @click="reset">
           重新選檔
@@ -175,13 +182,15 @@ function reset() {
 
       <div v-if="generated.length > 0" class="results">
         <div class="results-bar">
-          <h3>// 結果({{ generated.length }} 張)</h3>
-          <PixelButton size="sm" @click="downloadAllZip">📦 全部打包下載 (ZIP)</PixelButton>
+          <h3>// 結果（{{ generated.length }} 張）</h3>
+          <PixelButton size="sm" @click="downloadAllZip">全部打包下載 (ZIP)</PixelButton>
         </div>
         <div class="grid-preview">
           <div v-for="g in generated" :key="g.pageNum" class="thumb">
-            <img :src="g.url" />
-            <button class="thumb-dl" @click="downloadOne(g)">P.{{ g.pageNum }} ⬇</button>
+            <img :src="g.url" :alt="`page ${g.pageNum}`" />
+            <button class="thumb-dl" type="button" @click="downloadOne(g)">
+              P.{{ g.pageNum }} ⬇
+            </button>
           </div>
         </div>
       </div>
@@ -298,3 +307,5 @@ function reset() {
   cursor: pointer;
 }
 </style>
+
+
