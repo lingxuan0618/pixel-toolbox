@@ -11,9 +11,9 @@ defineProps<{
 }>()
 
 const tabs: Tab[] = [
+  { label: '工作台', to: '/pdf-pages' },
   { label: '合併', to: '/pdf-merge' },
   { label: '拆分', to: '/pdf-split' },
-  { label: '頁面管理', to: '/pdf-pages' },
   { label: '浮水印', to: '/pdf-watermark' },
   { label: '轉圖片', to: '/pdf-to-images' },
 ]

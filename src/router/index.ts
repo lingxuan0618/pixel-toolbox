@@ -121,8 +121,8 @@ export const router = createRouter({
       name: 'pdf-pages',
       component: () => import('../views/PdfPages.vue'),
       meta: {
-        title: 'PDF 頁面管理 · Pixel Toolbox',
-        description: '拖曳排序、旋轉、刪除 PDF 頁面，一次整理完成。',
+        title: 'PDF 工作台 · Pixel Toolbox',
+        description: '把多份 PDF 的頁面放在同一頁選取、排序、旋轉後再輸出。',
       },
     },
     {

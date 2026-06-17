@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, shallowRef, onUnmounted } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { PDFDocument, degrees } from 'pdf-lib'
 import { pdfjsLib } from '../lib/pdfjs'
 import ToolLayout from '../components/ToolLayout.vue'
@@ -7,187 +7,278 @@ import PdfToolTabs from '../components/PdfToolTabs.vue'
 import PixelButton from '../components/PixelButton.vue'
 import { downloadBlob } from '../lib/download'
 
-interface Page {
+interface SourceDoc {
   id: string
-  originalIndex: number   // 在原 PDF 中的 0-based 頁碼
-  rotation: number        // 累積旋轉 (0/90/180/270)
-  thumbUrl: string
+  file: File
+  name: string
+  bytes: Uint8Array
+  pageCount: number
+  sizeKB: number
 }
 
-const pdfFile = ref<File | null>(null)
-const pdfBytes = shallowRef<Uint8Array | null>(null)
-const pages = ref<Page[]>([])
-const outputName = ref('reordered')
+interface PageItem {
+  id: string
+  sourceId: string
+  sourceName: string
+  sourcePage: number
+  thumbUrl: string
+  rotation: number
+  selected: boolean
+}
+
+const sources = ref<SourceDoc[]>([])
+const pages = ref<PageItem[]>([])
+const outputName = ref('workbench')
 const isLoading = ref(false)
 const isExporting = ref(false)
 const error = ref<string | null>(null)
 const dropActive = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
-
-// 拖曳排序狀態
 const draggedId = ref<string | null>(null)
 const dragOverId = ref<string | null>(null)
 
-async function handleFile(f: File) {
-  if (f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) {
-    error.value = '只接受 PDF'
-    return
-  }
+const selectedCount = computed(() => pages.value.filter((p) => p.selected).length)
+
+function ensurePdfExt(name: string) {
+  const trimmed = name.trim() || 'workbench'
+  return /\.pdf$/i.test(trimmed) ? trimmed : `${trimmed}.pdf`
+}
+
+async function renderThumb(page: any): Promise<string> {
+  const base = page.getViewport({ scale: 1 })
+  const scale = 180 / base.width
+  const viewport = page.getViewport({ scale })
+  const canvas = document.createElement('canvas')
+  canvas.width = viewport.width
+  canvas.height = viewport.height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('無法建立 Canvas')
+  await page.render({ canvas, canvasContext: ctx, viewport }).promise
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error('縮圖轉換失敗'))),
+      'image/jpeg',
+      0.75,
+    )
+  })
+  return URL.createObjectURL(blob)
+}
+
+async function handleFiles(list: FileList) {
   error.value = null
   isLoading.value = true
-  pages.value.forEach(p => URL.revokeObjectURL(p.thumbUrl))
-  pages.value = []
   try {
-    pdfFile.value = f
-    outputName.value = f.name.replace(/\.pdf$/i, '') + '_reordered'
-    const ab = await f.arrayBuffer()
-    pdfBytes.value = new Uint8Array(ab)
-    // 用 PDF.js 渲染每頁縮圖
-    const doc = await pdfjsLib.getDocument({ data: new Uint8Array(ab.slice(0)) }).promise
-    const list: Page[] = []
-    for (let i = 1; i <= doc.numPages; i++) {
-      const page = await doc.getPage(i)
-      const baseVp = page.getViewport({ scale: 1 })
-      const scale = 180 / baseVp.width
-      const vp = page.getViewport({ scale })
-      const canvas = document.createElement('canvas')
-      canvas.width = vp.width
-      canvas.height = vp.height
-      const ctx = canvas.getContext('2d')!
-      await page.render({ canvas, canvasContext: ctx, viewport: vp }).promise
-      const blob = await new Promise<Blob>(res => canvas.toBlob(b => res(b!), 'image/jpeg', 0.75))
-      list.push({
-        id: crypto.randomUUID(),
-        originalIndex: i - 1,
-        rotation: 0,
-        thumbUrl: URL.createObjectURL(blob),
-      })
-      pages.value = [...list]  // progressive update
+    for (const file of Array.from(list)) {
+      const isPdf =
+        file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+      if (!isPdf) {
+        error.value = `${file.name} 不是 PDF，已跳過`
+        continue
+      }
+
+      const ab = await file.arrayBuffer()
+      const bytes = new Uint8Array(ab)
+      const sourceId = crypto.randomUUID()
+      let pageCount = -1
+
+      try {
+        const meta = await PDFDocument.load(bytes.slice(0), {
+          ignoreEncryption: true,
+          throwOnInvalidObject: false,
+          updateMetadata: false,
+        })
+        pageCount = meta.getPageCount()
+      } catch {
+        pageCount = -1
+      }
+
+      const source: SourceDoc = {
+        id: sourceId,
+        file,
+        name: file.name,
+        bytes,
+        pageCount,
+        sizeKB: Math.round(file.size / 1024),
+      }
+      sources.value.push(source)
+
+      const doc = await pdfjsLib.getDocument({ data: bytes }).promise
+      try {
+        const newPages: PageItem[] = []
+        for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
+          const page = await doc.getPage(pageNum)
+          const thumbUrl = await renderThumb(page)
+          newPages.push({
+            id: crypto.randomUUID(),
+            sourceId,
+            sourceName: file.name,
+            sourcePage: pageNum - 1,
+            thumbUrl,
+            rotation: 0,
+            selected: true,
+          })
+        }
+        pages.value.push(...newPages)
+      } finally {
+        doc.destroy()
+      }
     }
-    doc.destroy()
   } catch (e: unknown) {
-    error.value = '讀取失敗:' + (e instanceof Error ? e.message : '未知')
+    error.value = e instanceof Error ? e.message : '讀取 PDF 時發生錯誤'
   } finally {
     isLoading.value = false
   }
 }
 
 function onFileChange(e: Event) {
-  const f = (e.target as HTMLInputElement).files?.[0]
-  if (f) handleFile(f)
+  const list = (e.target as HTMLInputElement).files
+  if (list) handleFiles(list)
   ;(e.target as HTMLInputElement).value = ''
 }
+
 function onDrop(e: DragEvent) {
   e.preventDefault()
   dropActive.value = false
-  const f = e.dataTransfer?.files?.[0]
-  if (f) handleFile(f)
+  const list = e.dataTransfer?.files
+  if (list) handleFiles(list)
+}
+
+function togglePage(id: string) {
+  const page = pages.value.find((p) => p.id === id)
+  if (page) page.selected = !page.selected
 }
 
 function rotatePage(id: string) {
-  const p = pages.value.find(x => x.id === id)
-  if (p) p.rotation = (p.rotation + 90) % 360
-}
-function deletePage(id: string) {
-  const p = pages.value.find(x => x.id === id)
-  if (p) URL.revokeObjectURL(p.thumbUrl)
-  pages.value = pages.value.filter(x => x.id !== id)
-}
-function movePage(id: string, delta: number) {
-  const i = pages.value.findIndex(x => x.id === id)
-  const j = i + delta
-  if (i < 0 || j < 0 || j >= pages.value.length) return
-  const arr = [...pages.value]
-  ;[arr[i], arr[j]] = [arr[j], arr[i]]
-  pages.value = arr
+  const page = pages.value.find((p) => p.id === id)
+  if (page) page.rotation = (page.rotation + 90) % 360
 }
 
-// HTML drag-and-drop for reordering on desktop
+function movePage(id: string, delta: number) {
+  const index = pages.value.findIndex((p) => p.id === id)
+  const target = index + delta
+  if (index < 0 || target < 0 || target >= pages.value.length) return
+  const next = [...pages.value]
+  ;[next[index], next[target]] = [next[target], next[index]]
+  pages.value = next
+}
+
+function deletePage(id: string) {
+  const page = pages.value.find((p) => p.id === id)
+  if (!page) return
+  URL.revokeObjectURL(page.thumbUrl)
+  pages.value = pages.value.filter((p) => p.id !== id)
+}
+
+function selectAll() {
+  pages.value.forEach((p) => {
+    p.selected = true
+  })
+}
+
+function clearSelection() {
+  pages.value.forEach((p) => {
+    p.selected = false
+  })
+}
+
+function clearAll() {
+  pages.value.forEach((p) => URL.revokeObjectURL(p.thumbUrl))
+  pages.value = []
+  sources.value = []
+  outputName.value = 'workbench'
+  error.value = null
+}
+
 function onDragStart(id: string, e: DragEvent) {
   draggedId.value = id
-  e.dataTransfer?.setData('text/plain', id)
-  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', id)
+  }
 }
+
 function onDragOver(id: string, e: DragEvent) {
   e.preventDefault()
   if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
   dragOverId.value = id
 }
+
 function onDragLeave() {
   dragOverId.value = null
 }
+
 function onDropPage(id: string, e: DragEvent) {
   e.preventDefault()
   dragOverId.value = null
   if (!draggedId.value || draggedId.value === id) return
-  const arr = [...pages.value]
-  const from = arr.findIndex(p => p.id === draggedId.value)
-  const to = arr.findIndex(p => p.id === id)
+  const next = [...pages.value]
+  const from = next.findIndex((p) => p.id === draggedId.value)
+  const to = next.findIndex((p) => p.id === id)
   if (from < 0 || to < 0) return
-  const [moved] = arr.splice(from, 1)
-  arr.splice(to, 0, moved)
-  pages.value = arr
+  const [moved] = next.splice(from, 1)
+  next.splice(to, 0, moved)
+  pages.value = next
   draggedId.value = null
 }
 
-async function exportPdf() {
-  if (!pdfBytes.value || pages.value.length === 0) {
-    error.value = '尚未選 PDF 或沒有頁面可輸出'
+async function exportSelected() {
+  const selected = pages.value.filter((p) => p.selected)
+  if (selected.length === 0) {
+    error.value = '請先選擇至少一個頁面'
     return
   }
+
   isExporting.value = true
   error.value = null
+
   try {
-    const src = await PDFDocument.load(pdfBytes.value.slice(0), {
-      ignoreEncryption: true,
-      throwOnInvalidObject: false,
-      updateMetadata: false,
-    })
     const out = await PDFDocument.create()
-    const indices = pages.value.map(p => p.originalIndex)
-    const copied = await out.copyPages(src, indices)
-    copied.forEach((p, i) => {
-      const meta = pages.value[i]
-      if (meta.rotation !== 0) {
-        // pdf-lib rotation 是「累積」,所以要先取得原本的
-        const orig = p.getRotation().angle
-        p.setRotation(degrees((orig + meta.rotation) % 360))
+    const sourceCache = new Map<string, PDFDocument>()
+
+    for (const item of selected) {
+      let src = sourceCache.get(item.sourceId)
+      if (!src) {
+        const source = sources.value.find((s) => s.id === item.sourceId)
+        if (!source) continue
+        src = await PDFDocument.load(source.bytes.slice(0), {
+          ignoreEncryption: true,
+          throwOnInvalidObject: false,
+          updateMetadata: false,
+        })
+        sourceCache.set(item.sourceId, src)
       }
-      out.addPage(p)
-    })
+
+      const sourcePage = src.getPage(item.sourcePage)
+      const [copied] = await out.copyPages(src, [item.sourcePage])
+      const angle = (sourcePage.getRotation().angle + item.rotation) % 360
+      if (angle !== 0) copied.setRotation(degrees(angle))
+      out.addPage(copied)
+    }
+
     const bytes = await out.save()
     const blob = new Blob([bytes as BlobPart], { type: 'application/pdf' })
-    const fname = outputName.value.trim() || 'reordered'
-    downloadBlob(blob, /\.pdf$/i.test(fname) ? fname : fname + '.pdf')
+    downloadBlob(blob, ensurePdfExt(outputName.value))
   } catch (e: unknown) {
-    error.value = '輸出失敗:' + (e instanceof Error ? e.message : '未知')
+    error.value = `匯出失敗：${e instanceof Error ? e.message : '未知錯誤'}`
   } finally {
     isExporting.value = false
   }
 }
 
-function reset() {
-  pages.value.forEach(p => URL.revokeObjectURL(p.thumbUrl))
-  pages.value = []
-  pdfFile.value = null
-  pdfBytes.value = null
-}
-
 onUnmounted(() => {
-  pages.value.forEach(p => URL.revokeObjectURL(p.thumbUrl))
+  pages.value.forEach((p) => URL.revokeObjectURL(p.thumbUrl))
 })
 </script>
 
 <template>
   <ToolLayout
-    title="PDF 頁面管理"
-    icon="🔄"
-    description="拖曳排序頁面、單頁旋轉、刪除不要的頁。一次搞定。"
+    title="PDF 工作台"
+    icon="🧩"
+    description="多份 PDF 放在同一頁完成選頁、排序與輸出。"
   >
     <PdfToolTabs current="/pdf-pages" />
 
     <div
-      v-if="!pdfFile"
       class="dropzone"
       :class="{ active: dropActive }"
       @click="fileInput?.click()"
@@ -195,69 +286,91 @@ onUnmounted(() => {
       @dragleave="dropActive = false"
       @drop="onDrop"
     >
-      <div class="dz-icon">🔄</div>
-      <p>點這裡或拖 PDF 進來</p>
+      <div class="dz-icon">📄</div>
+      <p>{{ pages.length === 0 ? '點這裡或把 PDF 拖進來' : '繼續加入 PDF' }}</p>
+      <p class="dz-sub">支援多檔上傳，頁面會直接展開成縮圖。</p>
       <input
         ref="fileInput"
         type="file"
         accept="application/pdf,.pdf"
+        multiple
         hidden
         @change="onFileChange"
       />
     </div>
 
     <p v-if="error" class="err">⚠ {{ error }}</p>
-    <p v-if="isLoading" class="hint">產生縮圖中…({{ pages.length }} 已完成)</p>
+    <p v-if="isLoading" class="hint">載入中…</p>
 
-    <div v-if="pdfFile && pages.length > 0">
-      <div class="file-row">
-        📄 {{ pdfFile.name }} · {{ pages.length }} 頁(已經過編輯)
+    <div v-if="sources.length" class="source-strip">
+      <div v-for="source in sources" :key="source.id" class="source-pill">
+        {{ source.name }} ·
+        <span v-if="source.pageCount >= 0">{{ source.pageCount }} 頁</span>
+        <span v-else>無法讀取頁數</span>
+        · {{ source.sizeKB }} KB
       </div>
+    </div>
 
-      <div class="page-grid">
-        <div
-          v-for="(p, idx) in pages"
-          :key="p.id"
-          class="page-card"
-          :class="{ 'drag-over': dragOverId === p.id }"
-          :draggable="true"
-          @dragstart="onDragStart(p.id, $event)"
-          @dragover="onDragOver(p.id, $event)"
-          @dragleave="onDragLeave"
-          @drop="onDropPage(p.id, $event)"
-        >
-          <div class="page-num">P. {{ idx + 1 }}</div>
-          <div class="thumb-wrap">
-            <img
-              :src="p.thumbUrl"
-              :style="{ transform: `rotate(${p.rotation}deg)` }"
-              class="thumb"
-            />
-          </div>
-          <div class="page-actions">
-            <button class="pa-btn" title="左移" @click="movePage(p.id, -1)" :disabled="idx === 0">◄</button>
-            <button class="pa-btn" title="旋轉" @click="rotatePage(p.id)">↻</button>
-            <button class="pa-btn" title="右移" @click="movePage(p.id, 1)" :disabled="idx === pages.length - 1">►</button>
-            <button class="pa-btn danger" title="刪除" @click="deletePage(p.id)">✕</button>
+    <div v-if="pages.length" class="toolbar">
+      <div class="count">{{ selectedCount }} / {{ pages.length }} 已選</div>
+      <div class="toolbar-actions">
+        <PixelButton size="sm" variant="secondary" @click="selectAll">全選</PixelButton>
+        <PixelButton size="sm" variant="secondary" @click="clearSelection">清空選取</PixelButton>
+        <PixelButton size="sm" :disabled="isExporting || selectedCount === 0" @click="exportSelected">
+          {{ isExporting ? '輸出中…' : '匯出選取 PDF' }}
+        </PixelButton>
+      </div>
+    </div>
+
+    <div v-if="pages.length" class="page-grid">
+      <div
+        v-for="(page, index) in pages"
+        :key="page.id"
+        class="page-card"
+        :class="{ selected: page.selected, 'drag-over': dragOverId === page.id }"
+        draggable="true"
+        @dragstart="onDragStart(page.id, $event)"
+        @dragover="onDragOver(page.id, $event)"
+        @dragleave="onDragLeave"
+        @drop="onDropPage(page.id, $event)"
+      >
+        <div class="page-head">
+          <button class="check-btn" type="button" @click="togglePage(page.id)">
+            {{ page.selected ? '☑' : '☐' }}
+          </button>
+          <div class="page-meta">
+            <div class="page-title">{{ page.sourceName }}</div>
+            <div class="page-sub">來源頁 {{ page.sourcePage + 1 }} · 目前第 {{ index + 1 }} 頁</div>
           </div>
         </div>
-      </div>
 
-      <label class="field">
-        <span class="label">輸出檔名</span>
-        <div class="filename-row">
-          <input v-model="outputName" type="text" class="pixel-input" placeholder="reordered" />
+        <div class="thumb-wrap">
+          <img :src="page.thumbUrl" :style="{ transform: `rotate(${page.rotation}deg)` }" class="thumb" />
+        </div>
+
+        <div class="page-actions">
+          <button class="pa-btn" type="button" :disabled="index === 0" @click="movePage(page.id, -1)">↑</button>
+          <button class="pa-btn" type="button" @click="rotatePage(page.id)">↻</button>
+          <button class="pa-btn" type="button" :disabled="index === pages.length - 1" @click="movePage(page.id, 1)">↓</button>
+          <button class="pa-btn danger" type="button" @click="deletePage(page.id)">✕</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="pages.length" class="output-row">
+      <label class="filename-field">
+        <span class="label">輸出名稱</span>
+        <div class="filename-wrap">
+          <input v-model="outputName" class="pixel-input" type="text" placeholder="workbench" />
           <span class="ext">.pdf</span>
         </div>
       </label>
 
-      <div class="actions">
-        <PixelButton size="lg" :disabled="isExporting" @click="exportPdf">
-          {{ isExporting ? '匯出中…' : '💾 匯出 PDF' }}
+      <div class="output-actions">
+        <PixelButton size="lg" :disabled="isExporting || selectedCount === 0" @click="exportSelected">
+          {{ isExporting ? '輸出中…' : '輸出 PDF' }}
         </PixelButton>
-        <PixelButton variant="danger" size="sm" @click="reset">
-          重新選檔
-        </PixelButton>
+        <PixelButton variant="danger" size="sm" @click="clearAll">清空全部</PixelButton>
       </div>
     </div>
   </ToolLayout>
@@ -266,17 +379,24 @@ onUnmounted(() => {
 <style scoped>
 .dropzone {
   border: 4px dashed var(--border);
-  padding: 64px 24px;
+  padding: 48px 24px;
   text-align: center;
   cursor: pointer;
   background: var(--surface);
 }
-.dropzone:hover,
-.dropzone.active {
+.dropzone.active,
+.dropzone:hover {
   background: color-mix(in srgb, var(--accent) 8%, var(--surface));
 }
 .dz-icon {
-  font-size: 56px;
+  font-size: 48px;
+  margin-bottom: 8px;
+}
+.dz-sub,
+.hint {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin: 0;
 }
 .err {
   color: var(--danger);
@@ -285,53 +405,98 @@ onUnmounted(() => {
   margin: 16px 0;
   font-size: 12px;
 }
-.hint {
-  color: var(--text-dim);
-  font-size: 11px;
+.source-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
 }
-
-.file-row {
-  padding: 12px;
+.source-pill {
+  padding: 8px 10px;
   background: var(--surface);
   border: 3px solid var(--border);
-  box-shadow: 4px 4px 0 0 var(--shadow);
-  font-size: 11px;
-  margin-bottom: 16px;
+  font-size: 10px;
+  color: var(--text-dim);
 }
-
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+  padding: 12px;
+  border: 3px solid var(--border);
+  background: var(--surface);
+}
+.count {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.toolbar-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 .page-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 12px;
-  margin-bottom: 16px;
 }
 .page-card {
   background: var(--surface);
   border: 3px solid var(--border);
   box-shadow: 4px 4px 0 0 var(--shadow);
+  padding: 8px;
   display: flex;
   flex-direction: column;
-  padding: 8px;
+  gap: 8px;
   cursor: grab;
   user-select: none;
 }
 .page-card:active {
   cursor: grabbing;
 }
-.page-card.drag-over {
+.page-card.selected {
   border-color: var(--accent);
+}
+.page-card.drag-over {
   background: color-mix(in srgb, var(--accent) 12%, var(--surface));
 }
-.page-num {
+.page-head {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.check-btn {
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.page-meta {
+  min-width: 0;
+}
+.page-title {
   font-size: 11px;
-  color: var(--accent);
-  text-align: center;
-  margin-bottom: 4px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-sub {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 2px;
 }
 .thumb-wrap {
-  height: 180px;
-  background: var(--p8-white);
+  height: 190px;
   border: 2px solid var(--border);
+  background: var(--p8-white);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -341,20 +506,18 @@ onUnmounted(() => {
   max-width: 100%;
   max-height: 100%;
   display: block;
-  transition: transform 0.15s;
 }
 .page-actions {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
-  margin-top: 6px;
 }
 .pa-btn {
+  border: 2px solid var(--border);
   background: var(--surface);
   color: var(--text);
-  border: 2px solid var(--border);
   font-family: inherit;
-  font-size: 11px;
+  font-size: 12px;
   padding: 6px 0;
   cursor: pointer;
 }
@@ -362,25 +525,35 @@ onUnmounted(() => {
   background: var(--accent);
   color: var(--bg);
 }
-.pa-btn:disabled {
-  opacity: 0.4;
-}
 .pa-btn.danger:hover {
   background: var(--danger);
   color: var(--p8-white);
 }
-
-.field {
+.pa-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.output-row {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 3px dashed var(--border);
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+}
+.filename-field {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-bottom: 16px;
+  min-width: min(100%, 320px);
 }
 .label {
   font-size: 10px;
   color: var(--accent-2);
 }
-.filename-row {
+.filename-wrap {
   display: flex;
   gap: 8px;
 }
@@ -394,6 +567,9 @@ onUnmounted(() => {
   border: 3px solid var(--border);
   outline: none;
 }
+.pixel-input:focus {
+  border-color: var(--accent);
+}
 .ext {
   display: inline-flex;
   align-items: center;
@@ -403,12 +579,9 @@ onUnmounted(() => {
   font-size: 12px;
   color: var(--text-dim);
 }
-
-.actions {
+.output-actions {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
-  padding-top: 12px;
-  border-top: 3px dashed var(--border);
 }
 </style>

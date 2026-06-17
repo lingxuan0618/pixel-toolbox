@@ -18,7 +18,7 @@ const allTools: Tool[] = [
   { icon: '✏️',  name: 'PDF 簽名',     desc: '畫一畫蓋上去,馬上下載',  to: '/pdf-sign',       status: 'ready' },
   { icon: '🗂️', name: 'PDF 合併',     desc: '多份 PDF 排序合併',      to: '/pdf-merge',      status: 'ready' },
   { icon: '✂️',  name: 'PDF 拆分',     desc: '選頁面,拆成新檔',        to: '/pdf-split',      status: 'ready' },
-  { icon: '🔄',  name: 'PDF 頁面管理', desc: '旋轉、刪除、拖曳排序',    to: '/pdf-pages',      status: 'ready' },
+  { icon: '🧩',  name: 'PDF 工作台',   desc: '選頁、排序、合併一次完成',  to: '/pdf-pages',      status: 'ready' },
   { icon: '💧',  name: 'PDF 加浮水印', desc: '文字 / 圖片,可拖可縮',  to: '/pdf-watermark',  status: 'ready' },
   { icon: '🖼️', name: 'PDF → 圖片',   desc: '每頁變成 JPG / PNG',     to: '/pdf-to-images',  status: 'ready' },
   { icon: '📄',  name: '圖片 → PDF',   desc: '多張圖合成一份 PDF',     to: '/images-to-pdf',  status: 'ready' },
