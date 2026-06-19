@@ -28,12 +28,16 @@ const globalErr = ref<string | null>(null)
 const processedCount = ref(0)
 
 const progressLabel = computed(() => {
-  if (!isProcessing.value) return '等待開始轉換'
-  return `轉換中（${processedCount.value}/${entries.value.length}）`
+  if (!isProcessing.value) return '尚未開始轉換'
+  return `轉換中 ${processedCount.value}/${entries.value.length}`
 })
 
 const progressPercent = computed(() =>
   entries.value.length > 0 ? Math.round((processedCount.value / entries.value.length) * 100) : 0,
+)
+
+const selectedSize = computed(() =>
+  entries.value.reduce((total, entry) => total + entry.file.size, 0),
 )
 
 function revokeEntry(entry: Entry) {
@@ -41,10 +45,22 @@ function revokeEntry(entry: Entry) {
   if (entry.outUrl) URL.revokeObjectURL(entry.outUrl)
 }
 
+function resetConvertedState() {
+  for (const entry of entries.value) {
+    if (entry.outUrl) URL.revokeObjectURL(entry.outUrl)
+    entry.outBlob = undefined
+    entry.outSize = undefined
+    entry.outUrl = undefined
+    entry.errMsg = undefined
+    entry.status = 'pending'
+  }
+  processedCount.value = 0
+}
+
 function handleFiles(list: FileList) {
   for (const file of Array.from(list)) {
-    if (!/^image\//i.test(file.type) && !/\.(png|jpe?g|webp|bmp|gif)$/i.test(file.name)) {
-      globalErr.value = `${file.name} 不是支援的圖片格式。`
+    if (!/^image\//i.test(file.type) && !/\.(png|jpe?g|webp|bmp|gif|avif|heic)$/i.test(file.name)) {
+      globalErr.value = `${file.name} 不是可處理的圖片格式`
       continue
     }
 
@@ -90,7 +106,7 @@ async function convertOne(file: File, fmt: Format, q: number): Promise<Blob> {
   canvas.height = bitmap.height
   const ctx = canvas.getContext('2d')
 
-  if (!ctx) throw new Error('無法建立繪圖環境。')
+  if (!ctx) throw new Error('無法建立圖片轉換畫布')
 
   if (fmt === 'jpeg') {
     ctx.fillStyle = '#ffffff'
@@ -102,7 +118,7 @@ async function convertOne(file: File, fmt: Format, q: number): Promise<Blob> {
 
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error('圖片輸出失敗。'))),
+      (blob) => (blob ? resolve(blob) : reject(new Error('圖片輸出失敗'))),
       mime,
       fmt === 'png' ? undefined : q / 100,
     )
@@ -144,6 +160,8 @@ async function convertAll() {
   try {
     for (const entry of entries.value) {
       entry.status = 'processing'
+      entry.errMsg = undefined
+
       try {
         const blob = await convertOne(entry.file, format.value, quality.value)
         if (entry.outUrl) URL.revokeObjectURL(entry.outUrl)
@@ -157,7 +175,7 @@ async function convertAll() {
         entry.outSize = undefined
         entry.outUrl = undefined
         entry.status = 'error'
-        entry.errMsg = err instanceof Error ? err.message : '圖片轉換失敗。'
+        entry.errMsg = err instanceof Error ? err.message : '轉換失敗'
       } finally {
         processedCount.value += 1
       }
@@ -190,14 +208,8 @@ async function downloadAllZip() {
 }
 
 watch([format, quality], () => {
-  for (const entry of entries.value) {
-    if (entry.outUrl) URL.revokeObjectURL(entry.outUrl)
-    entry.outBlob = undefined
-    entry.outSize = undefined
-    entry.outUrl = undefined
-    entry.errMsg = undefined
-    entry.status = 'pending'
-  }
+  if (isProcessing.value) return
+  resetConvertedState()
 })
 
 onUnmounted(() => {
@@ -207,43 +219,59 @@ onUnmounted(() => {
 
 <template>
   <ToolLayout
-    title="圖片格式轉換"
-    icon="IMG"
-    description="JPG、PNG、WebP 互轉，支援批次處理與自動下載。"
+    title="圖片格式互轉"
+    icon="🎨"
+    description="加入圖片後，可一次轉成 PNG、JPG 或 WebP，並保留單檔與批次下載。"
   >
-    <div
-      class="dropzone"
-      :class="{ active: dropActive }"
-      @click="fileInput?.click()"
-      @dragover.prevent="dropActive = true"
-      @dragleave="dropActive = false"
-      @drop="onDrop"
-    >
-      <div class="dz-icon">IMG</div>
-      <p>{{ entries.length === 0 ? '點這裡或拖曳圖片進來' : '可繼續加入更多圖片' }}</p>
-      <p class="sub">支援 PNG、JPG、WebP、BMP、GIF。</p>
-      <input
-        ref="fileInput"
-        type="file"
-        accept="image/*"
-        multiple
-        hidden
-        @change="onFileChange"
-      />
-    </div>
+    <p v-if="globalErr" class="err">錯誤：{{ globalErr }}</p>
 
-    <p v-if="globalErr" class="err">⚠ {{ globalErr }}</p>
+    <section class="section">
+      <div
+        class="dropzone"
+        :class="{ active: dropActive }"
+        @click="fileInput?.click()"
+        @dragover.prevent="dropActive = true"
+        @dragleave="dropActive = false"
+        @drop="onDrop"
+      >
+        <div class="dz-icon">🎨</div>
+        <p>{{ entries.length === 0 ? '點這裡或拖曳圖片進來' : '再加入更多圖片' }}</p>
+        <p class="sub">支援 PNG、JPG、WebP、BMP、GIF、AVIF、HEIC</p>
+        <input
+          ref="fileInput"
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          @change="onFileChange"
+        />
+      </div>
 
-    <div v-if="entries.length > 0" class="settings">
+      <div v-if="entries.length > 0" class="file-summary">
+        <div class="summary-head">
+          <span>已加入 {{ entries.length }} 張圖片</span>
+          <span>{{ readableSize(selectedSize) }}</span>
+        </div>
+        <div class="file-list">
+          <span v-for="entry in entries" :key="entry.id" class="file-chip">
+            {{ entry.file.name }}
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <section v-if="entries.length > 0" class="section">
+      <h3 class="section-title">輸出設定</h3>
       <div class="grid">
         <label class="field">
           <span class="label">輸出格式</span>
           <select v-model="format" class="pixel-input">
-            <option value="webp">WebP（體積小）</option>
-            <option value="jpeg">JPG（通用）</option>
-            <option value="png">PNG（無損）</option>
+            <option value="webp">WebP</option>
+            <option value="jpeg">JPG</option>
+            <option value="png">PNG</option>
           </select>
         </label>
+
         <label v-if="format !== 'png'" class="field">
           <span class="label">品質（{{ quality }}%）</span>
           <input v-model.number="quality" type="range" min="40" max="100" />
@@ -260,51 +288,6 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div class="preview-grid">
-        <article v-for="entry in entries" :key="entry.id" class="preview-card">
-          <div class="preview-head">
-            <span class="preview-name">{{ entry.file.name }}</span>
-            <span class="preview-state" :class="entry.status">{{ entry.status }}</span>
-          </div>
-          <div class="preview-body">
-            <figure class="preview-shot">
-              <img :src="entry.thumbUrl" :alt="entry.file.name" />
-              <figcaption>原圖</figcaption>
-            </figure>
-            <figure class="preview-shot">
-              <img v-if="entry.outUrl" :src="entry.outUrl" :alt="`${entry.file.name} 轉換後預覽`" />
-              <div v-else class="preview-empty">尚未轉換</div>
-              <figcaption>
-                {{ entry.outSize !== undefined ? readableSize(entry.outSize) : '待轉換' }}
-              </figcaption>
-            </figure>
-          </div>
-        </article>
-      </div>
-
-      <ul class="list">
-        <li v-for="entry in entries" :key="entry.id" class="row">
-          <div class="info">
-            <div class="name">{{ entry.file.name }}</div>
-            <div class="meta">
-              {{ readableSize(entry.file.size) }}
-              <span v-if="entry.status === 'done' && entry.outSize !== undefined">
-                → {{ readableSize(entry.outSize) }}
-                <span class="ratio">
-                  ({{ Math.round((entry.outSize / entry.file.size) * 100) }}%)
-                </span>
-              </span>
-              <span v-if="entry.status === 'processing'" class="row-state"> 轉換中</span>
-              <span v-if="entry.status === 'error'" class="row-err"> {{ entry.errMsg }}</span>
-            </div>
-          </div>
-          <PixelButton v-if="entry.status === 'done'" size="sm" @click="downloadOne(entry)">
-            下載
-          </PixelButton>
-          <button class="ib danger" type="button" @click="remove(entry.id)">刪</button>
-        </li>
-      </ul>
-
       <div class="actions">
         <PixelButton size="lg" :disabled="isProcessing" @click="convertAll">
           {{ isProcessing ? '轉換中…' : '開始轉換' }}
@@ -315,15 +298,78 @@ onUnmounted(() => {
           :disabled="!entries.some((entry) => entry.status === 'done')"
           @click="downloadAllZip"
         >
-          全部下載 (ZIP)
+          批次下載 ZIP
         </PixelButton>
         <PixelButton variant="secondary" size="sm" @click="clearAll">清空</PixelButton>
       </div>
-    </div>
+    </section>
+
+    <section v-if="entries.length > 0" class="section">
+      <h3 class="section-title">轉換結果</h3>
+      <div class="preview-grid">
+        <article v-for="entry in entries" :key="entry.id" class="preview-card">
+          <div class="preview-head">
+            <span class="preview-name">{{ entry.file.name }}</span>
+            <span class="preview-state" :class="entry.status">{{ entry.status }}</span>
+          </div>
+
+          <div class="preview-body">
+            <figure class="preview-shot">
+              <img :src="entry.thumbUrl" :alt="entry.file.name" />
+              <figcaption>原圖</figcaption>
+            </figure>
+
+            <figure class="preview-shot">
+              <img v-if="entry.outUrl" :src="entry.outUrl" :alt="`${entry.file.name} 的轉換結果`" />
+              <div v-else class="preview-empty">尚未轉換</div>
+              <figcaption>
+                {{ entry.outSize !== undefined ? readableSize(entry.outSize) : '等待輸出' }}
+              </figcaption>
+            </figure>
+          </div>
+
+          <div class="preview-foot">
+            <span class="meta">
+              {{ readableSize(entry.file.size) }}
+              <template v-if="entry.status === 'done' && entry.outSize !== undefined">
+                → {{ readableSize(entry.outSize) }}
+                ({{ Math.round((entry.outSize / entry.file.size) * 100) }}%)
+              </template>
+            </span>
+
+            <span class="meta state" :class="entry.status">
+              <template v-if="entry.status === 'processing'">轉換中</template>
+              <template v-else-if="entry.status === 'done'">完成</template>
+              <template v-else-if="entry.status === 'error'">失敗：{{ entry.errMsg }}</template>
+              <template v-else>等待轉換</template>
+            </span>
+          </div>
+
+          <div class="preview-actions">
+            <PixelButton v-if="entry.status === 'done'" size="sm" @click="downloadOne(entry)">
+              下載
+            </PixelButton>
+            <button class="ib danger" type="button" @click="remove(entry.id)">刪</button>
+          </div>
+        </article>
+      </div>
+    </section>
   </ToolLayout>
 </template>
 
 <style scoped>
+.section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 3px dashed var(--border);
+}
+
+.section-title {
+  font-size: 13px;
+  margin: 0 0 12px;
+  color: var(--accent-2);
+}
+
 .dropzone {
   border: 4px dashed var(--border);
   padding: 48px 24px;
@@ -348,24 +394,47 @@ onUnmounted(() => {
   color: var(--text-dim);
 }
 
+.file-summary {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.summary-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.file-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  font-size: 10px;
+}
+
 .err {
   color: var(--danger);
   border: 3px solid var(--danger);
   padding: 12px;
-  margin: 16px 0;
+  margin: 0 0 16px;
   font-size: 12px;
-}
-
-.settings {
-  margin-top: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
 }
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
 }
 
@@ -393,6 +462,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-top: 16px;
 }
 
 .progress-head {
@@ -497,52 +567,36 @@ onUnmounted(() => {
   border-top: 2px solid var(--border);
 }
 
-.list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+.preview-foot {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.row {
-  display: flex;
-  align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  padding: 12px;
-  background: var(--surface);
-  border: 3px solid var(--border);
-  box-shadow: 4px 4px 0 0 var(--shadow);
-}
-
-.info {
-  flex: 1;
-  min-width: 0;
-}
-
-.name {
-  font-size: 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  margin-top: 10px;
+  font-size: 10px;
 }
 
 .meta {
-  font-size: 10px;
   color: var(--text-dim);
+  min-width: 0;
 }
 
-.ratio {
+.meta.state.done {
   color: var(--success);
 }
 
-.row-state {
+.meta.state.processing {
   color: var(--accent);
 }
 
-.row-err {
+.meta.state.error {
   color: var(--danger);
+}
+
+.preview-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 10px;
 }
 
 .ib {
@@ -563,6 +617,7 @@ onUnmounted(() => {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+  margin-top: 16px;
   padding-top: 12px;
   border-top: 3px dashed var(--border);
 }

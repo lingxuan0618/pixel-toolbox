@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+﻿import { createRouter, createWebHistory } from 'vue-router'
 import { isAndroid } from '../lib/platform'
 import { applySeo } from '../lib/seo'
 
@@ -19,7 +19,7 @@ export const router = createRouter({
       name: 'pdf-pages',
       component: () => import('../views/PdfPages.vue'),
       meta: {
-        title: 'PDF 頁面工具 - Pixel Toolbox',
+        title: 'PDF 頁面整理 - Pixel Toolbox',
         description: '合併、拆頁、調整順序、旋轉與刪除 PDF 頁面後再匯出。',
       },
     },

@@ -272,7 +272,7 @@ onUnmounted(() => {
 
 <template>
   <ToolLayout
-    title="PDF 工作台"
+    title="PDF 頁面整理"
     icon="🧩"
     description="多份 PDF 放在同一頁完成選頁、排序與輸出。"
   >

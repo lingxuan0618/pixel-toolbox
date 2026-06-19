@@ -96,6 +96,7 @@ html,
 body {
   margin: 0;
   padding: 0;
+  overflow-x: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: 'Press Start 2P', 'Cubic 11', 'Courier New', monospace;
@@ -112,6 +113,21 @@ body {
   transition:
     background-color 0.15s,
     color 0.15s;
+}
+
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  max-width: 100%;
 }
 
 /* ============================================
@@ -231,5 +247,10 @@ a:hover {
   }
   h1 {
     font-size: 18px;
+  }
+
+  .pixel-card,
+  .pixel-card-component {
+    padding: 18px 14px;
   }
 }

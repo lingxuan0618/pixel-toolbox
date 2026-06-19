@@ -149,7 +149,7 @@ onUnmounted(() => {
 <template>
   <ToolLayout
     title="圖片壓縮"
-    icon="IMG"
+    icon="🗜️"
     description="批次壓縮圖片，控制目標容量與最大邊長。"
   >
     <div
@@ -160,7 +160,7 @@ onUnmounted(() => {
       @dragleave="dropActive = false"
       @drop="onDrop"
     >
-      <div class="dz-icon">IMG</div>
+      <div class="dz-icon">🗜️</div>
       <p>{{ entries.length === 0 ? '點這裡或拖曳圖片進來' : '可繼續加入更多圖片' }}</p>
       <p class="sub">支援 JPG、PNG、WebP、BMP、GIF。</p>
       <input
@@ -192,7 +192,14 @@ onUnmounted(() => {
           <span>{{ progressText }}</span>
           <span>{{ progressPercent }}%</span>
         </div>
-        <div class="progress-track" role="progressbar" :aria-valuenow="progressPercent" aria-valuemin="0" aria-valuemax="100">
+        <div
+          class="progress-track"
+          :class="{ processing: isProcessing }"
+          role="progressbar"
+          :aria-valuenow="progressPercent"
+          aria-valuemin="0"
+          aria-valuemax="100"
+        >
           <div class="progress-fill" :style="{ width: `${progressPercent}%` }"></div>
         </div>
       </div>
@@ -261,7 +268,7 @@ onUnmounted(() => {
       <div class="lightbox-panel">
         <div class="lightbox-bar">
           <span class="lightbox-title">{{ preview.title }}</span>
-          <button type="button" class="lightbox-close" @click="closePreview">關閉</button>
+          <button type="button" class="lightbox-close" @click="closePreview" aria-label="關閉預覽">✕</button>
         </div>
         <img class="lightbox-img" :src="preview.src" :alt="preview.title" />
       </div>
@@ -355,11 +362,41 @@ onUnmounted(() => {
   border: 2px solid var(--border);
   background: var(--bg);
   overflow: hidden;
+  position: relative;
 }
 
 .progress-fill {
   height: 100%;
   background: var(--accent);
+  transition: width 180ms linear;
+}
+
+.progress-track.processing::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.18) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.18) 50%,
+    rgba(255, 255, 255, 0.18) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: 18px 18px;
+  animation: progress-stripes 1s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes progress-stripes {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 18px 0;
+  }
 }
 
 .row {
@@ -497,9 +534,12 @@ onUnmounted(() => {
   min-height: 32px;
   padding: 0 10px;
   border: 2px solid var(--border);
-  background: var(--bg);
+  background: var(--surface);
+  color: var(--text);
   cursor: pointer;
   font-family: inherit;
+  font-size: 16px;
+  line-height: 1;
 }
 
 .lightbox-img {

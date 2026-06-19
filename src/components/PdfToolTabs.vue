@@ -2,6 +2,7 @@
 import { RouterLink } from 'vue-router'
 
 type Tab = {
+  icon: string
   label: string
   to: string
 }
@@ -11,11 +12,12 @@ defineProps<{
 }>()
 
 const tabs: Tab[] = [
-  { label: 'PDF 頁面工具', to: '/pdf-pages' },
-  { label: '合併 PDF', to: '/pdf-merge' },
-  { label: '拆分 PDF', to: '/pdf-split' },
-  { label: '加浮水印', to: '/pdf-watermark' },
-  { label: 'PDF 轉圖片', to: '/pdf-to-images' },
+  { icon: '🧩', label: 'PDF 頁面管理', to: '/pdf-pages' },
+  { icon: '✍️', label: 'PDF 簽名', to: '/pdf-sign' },
+  { icon: '🗂️', label: 'PDF 合併', to: '/pdf-merge' },
+  { icon: '✂️', label: 'PDF 拆分', to: '/pdf-split' },
+  { icon: '💧', label: 'PDF 浮水印', to: '/pdf-watermark' },
+  { icon: '🖼️', label: 'PDF 轉圖片', to: '/pdf-to-images' },
 ]
 </script>
 
@@ -27,8 +29,11 @@ const tabs: Tab[] = [
       :to="tab.to"
       class="pdf-tab"
       :class="{ active: current === tab.to }"
+      :title="tab.label"
+      :aria-label="tab.label"
     >
-      {{ tab.label }}
+      <span class="tab-icon" aria-hidden="true">{{ tab.icon }}</span>
+      <span class="sr-only">{{ tab.label }}</span>
     </RouterLink>
   </nav>
 </template>
@@ -45,16 +50,17 @@ const tabs: Tab[] = [
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 38px;
-  padding: 8px 12px;
+  width: 44px;
+  height: 44px;
   background: var(--surface);
   color: var(--text);
   border: 3px solid var(--border);
   box-shadow: 3px 3px 0 0 var(--shadow);
   border-bottom: none;
-  font-size: 11px;
   text-decoration: none;
-  white-space: nowrap;
+  font-size: 22px;
+  line-height: 1;
+  flex: 0 0 auto;
 }
 
 .pdf-tab.active {
@@ -62,9 +68,28 @@ const tabs: Tab[] = [
   color: var(--bg);
 }
 
+.tab-icon {
+  display: block;
+  transform: translateY(-1px);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 @media (max-width: 640px) {
   .pdf-tab {
-    flex: 1 1 calc(50% - 8px);
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
   }
 }
 </style>

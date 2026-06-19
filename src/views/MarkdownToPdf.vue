@@ -1,43 +1,43 @@
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { marked } from 'marked'
 import ToolLayout from '../components/ToolLayout.vue'
 import PixelButton from '../components/PixelButton.vue'
 import { downloadBlob } from '../lib/download'
 
-const md = ref(`# 我的文件
+const md = ref(`# Markdown 轉 PDF / HTML
 
-> 把 Markdown 轉成 PDF 或 HTML。支援 GFM(表格、清單、勾選框)。
+> 這是一個把 Markdown 直接轉成正式文件的工具，支援 GFM 表格、勾選框與程式碼區塊。
 
 ## 標題層級
 
-### 三級標題
-#### 四級標題
+### 次標題
+#### 更小的標題
 
-## 文字樣式
+## 基本格式
 
-**粗體**、*斜體*、~~刪除~~、\`程式碼\`
+**粗體**、*斜體*、\`code\`
 
 ## 清單
 
 - 項目 1
 - 項目 2
-  - 巢狀
+  - 子項目
 - 項目 3
 
-## 任務清單
+## 勾選框
 
-- [x] 完成的事
-- [ ] 沒做的事
+- [x] 完成項目
+- [ ] 未完成項目
 
 ## 表格
 
-| 名稱  | 數量 | 備註 |
+| 名稱 | 數量 | 備註 |
 |------|------|------|
-| 蘋果  | 3    | 好吃 |
-| 香蕉  | 5    | 黃色 |
+| 鉛筆 | 3    | 常用 |
+| 橡皮 | 5    | 備用 |
 
-## 程式碼區塊
+## 程式碼
 
 \`\`\`js
 function hello(name) {
@@ -45,10 +45,10 @@ function hello(name) {
 }
 \`\`\`
 
-## 引用
+## 引言
 
-> 這是引言。
-> 第二行。
+> 這是一段引用。
+> 第二行延續內容。
 
 ## 連結
 
@@ -63,11 +63,23 @@ const css = ref(`body {
   padding: 32px;
   max-width: 760px;
   margin: 0 auto;
+  background: #fff;
 }
-h1, h2, h3, h4 { color: #1d2b53; margin-top: 1.4em; }
-h1 { border-bottom: 3px solid #29adff; padding-bottom: 8px; }
-h2 { border-bottom: 1px solid #ddd; padding-bottom: 4px; }
-a { color: #29adff; }
+h1, h2, h3, h4 {
+  color: #1d2b53;
+  margin-top: 1.4em;
+}
+h1 {
+  border-bottom: 3px solid #29adff;
+  padding-bottom: 8px;
+}
+h2 {
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 4px;
+}
+a {
+  color: #29adff;
+}
 code {
   background: #f4f3ec;
   padding: 2px 6px;
@@ -82,7 +94,11 @@ pre {
   border-radius: 4px;
   overflow-x: auto;
 }
-pre code { background: transparent; color: inherit; padding: 0; }
+pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
 blockquote {
   border-left: 4px solid #29adff;
   padding: 4px 16px;
@@ -90,16 +106,29 @@ blockquote {
   margin: 1em 0;
   background: #f9f9f9;
 }
-table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-table th, table td {
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+}
+table th,
+table td {
   border: 1px solid #ddd;
   padding: 8px 12px;
   text-align: left;
 }
-table th { background: #f5f5f5; }
-ul li input[type="checkbox"] { margin-right: 6px; }
-img { max-width: 100%; }
-`)
+table th {
+  background: #f5f5f5;
+}
+ul li input[type="checkbox"] {
+  margin-right: 6px;
+}
+img {
+  max-width: 100%;
+}
+@page {
+  margin: 15mm;
+}`)
 
 const format = ref<'a4' | 'letter' | 'a3'>('a4')
 const orientation = ref<'portrait' | 'landscape'>('portrait')
@@ -107,6 +136,7 @@ const margin = ref(15)
 const outputName = ref('document')
 const error = ref<string | null>(null)
 const isProcessing = ref(false)
+const previewSrc = ref('')
 
 marked.setOptions({ gfm: true, breaks: false })
 
@@ -114,68 +144,79 @@ const renderedHtml = computed(() => {
   try {
     return marked.parse(md.value, { async: false }) as string
   } catch (e) {
-    return '<p style="color:red">Markdown 解析錯誤:' + (e as Error).message + '</p>'
+    return `<p style="color:red">Markdown 解析失敗：${e instanceof Error ? e.message : '未知錯誤'}</p>`
   }
 })
 
-const fullHtml = computed(() => {
-  return `<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><title>${outputName.value}</title><style>${css.value}</style></head><body>${renderedHtml.value}</body></html>`
+const previewHtml = computed(() => {
+  return `<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><style>${css.value}</style></head><body>${renderedHtml.value}</body></html>`
 })
 
-const previewSrc = ref<string>('')
-
 function refreshPreview() {
-  const blob = new Blob([fullHtml.value], { type: 'text/html;charset=utf-8' })
+  const blob = new Blob([previewHtml.value], { type: 'text/html;charset=utf-8' })
   if (previewSrc.value) URL.revokeObjectURL(previewSrc.value)
   previewSrc.value = URL.createObjectURL(blob)
 }
 
-// 即時更新預覽(debounce 300ms)
 let debounceTimer: number | null = null
 watch([md, css], () => {
   if (debounceTimer) clearTimeout(debounceTimer)
-  debounceTimer = window.setTimeout(refreshPreview, 300)
+  debounceTimer = window.setTimeout(refreshPreview, 200)
 }, { immediate: true })
 
 async function downloadHtml() {
-  const blob = new Blob([fullHtml.value], { type: 'text/html;charset=utf-8' })
+  const blob = new Blob([previewHtml.value], { type: 'text/html;charset=utf-8' })
   const fname = outputName.value.trim() || 'document'
-  downloadBlob(blob, /\.html?$/i.test(fname) ? fname : fname + '.html')
+  downloadBlob(blob, /\.html?$/i.test(fname) ? fname : `${fname}.html`)
 }
 
-async function downloadPdf() {
+function waitForFrame(frame: HTMLIFrameElement) {
+  return new Promise<void>((resolve, reject) => {
+    frame.addEventListener('load', () => resolve(), { once: true })
+    frame.addEventListener('error', () => reject(new Error('預覽框載入失敗。')), { once: true })
+  })
+}
+
+async function printPdf() {
   isProcessing.value = true
   error.value = null
+  let frame: HTMLIFrameElement | null = null
+
   try {
-    const { default: html2pdf } = await import('html2pdf.js') as any
-    const wrap = document.createElement('div')
-    wrap.style.position = 'fixed'
-    wrap.style.left = '-9999px'
-    wrap.style.top = '0'
-    wrap.style.width =
-      orientation.value === 'portrait' ? '794px' : '1123px'
-    wrap.innerHTML = `<style>${css.value}</style>${renderedHtml.value}`
-    document.body.appendChild(wrap)
+    frame = document.createElement('iframe')
+    frame.setAttribute('aria-hidden', 'true')
+    frame.style.position = 'fixed'
+    frame.style.left = '0'
+    frame.style.top = '0'
+    frame.style.width = orientation.value === 'portrait' ? '794px' : '1123px'
+    frame.style.height = 'auto'
+    frame.style.border = '0'
+    frame.style.transform = 'translateX(120vw)'
+    frame.srcdoc = previewHtml.value
+    document.body.appendChild(frame)
+
+    await waitForFrame(frame)
+
+    const target = frame.contentWindow
+    if (!target) throw new Error('無法建立列印視窗。')
 
     const fname = outputName.value.trim() || 'document'
-    const finalName = /\.pdf$/i.test(fname) ? fname : fname + '.pdf'
+    const title = /\.html?$/i.test(fname) ? fname.replace(/\.html?$/i, '') : fname
+    frame.contentDocument!.title = title
 
-    await html2pdf()
-      .set({
-        margin: margin.value,
-        filename: finalName,
-        image: { type: 'jpeg', quality: 0.95 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
-        jsPDF: { unit: 'mm', format: format.value, orientation: orientation.value },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-      })
-      .from(wrap)
-      .save()
-
-    document.body.removeChild(wrap)
+    await new Promise<void>((resolve) => {
+      const done = () => {
+        window.removeEventListener('afterprint', done)
+        resolve()
+      }
+      window.addEventListener('afterprint', done, { once: true })
+      target.focus()
+      target.print()
+    })
   } catch (e: unknown) {
-    error.value = '產生失敗:' + (e instanceof Error ? e.message : '未知')
+    error.value = `列印失敗：${e instanceof Error ? e.message : '未知錯誤'}`
   } finally {
+    if (frame?.parentNode) frame.parentNode.removeChild(frame)
     isProcessing.value = false
   }
 }
@@ -183,22 +224,25 @@ async function downloadPdf() {
 function loadMdFile(e: Event) {
   const f = (e.target as HTMLInputElement).files?.[0]
   if (!f) return
-  const r = new FileReader()
-  r.onload = () => { md.value = r.result as string }
-  r.readAsText(f)
+  const reader = new FileReader()
+  reader.onload = () => {
+    md.value = String(reader.result ?? '')
+  }
+  reader.readAsText(f)
   ;(e.target as HTMLInputElement).value = ''
 }
 
 onUnmounted(() => {
   if (previewSrc.value) URL.revokeObjectURL(previewSrc.value)
+  if (debounceTimer) clearTimeout(debounceTimer)
 })
 </script>
 
 <template>
   <ToolLayout
-    title="Markdown → PDF / HTML"
+    title="Markdown 轉 PDF / HTML"
     icon="📝"
-    description="支援 GitHub 風格 Markdown(表格、勾選框)。可下載 HTML 或 PDF。"
+    description="把 GitHub Flavored Markdown 直接轉成正式文件。"
   >
     <p v-if="error" class="err">⚠ {{ error }}</p>
 
@@ -215,7 +259,7 @@ onUnmounted(() => {
       </label>
 
       <label class="field tall">
-        <span class="label">CSS(選填,影響輸出樣式)</span>
+        <span class="label">CSS（印刷樣式）</span>
         <textarea
           v-model="css"
           class="pixel-input mono"
@@ -227,13 +271,13 @@ onUnmounted(() => {
 
     <div class="row">
       <label class="file-pill">
-        📂 匯入 .md
+        匯入 .md
         <input type="file" accept=".md,.markdown,.txt,text/markdown" hidden @change="loadMdFile" />
       </label>
     </div>
 
     <div class="preview-block">
-      <h3>// 即時預覽</h3>
+      <h3>預覽</h3>
       <iframe
         v-if="previewSrc"
         :src="previewSrc"
@@ -259,27 +303,24 @@ onUnmounted(() => {
         </select>
       </label>
       <label class="field">
-        <span class="label">PDF 邊界({{ margin }} mm)</span>
+        <span class="label">PDF 邊界（{{ margin }} mm）</span>
         <input v-model.number="margin" type="range" min="0" max="40" />
       </label>
       <label class="field">
-        <span class="label">檔名</span>
+        <span class="label">輸出名稱</span>
         <input v-model="outputName" class="pixel-input" type="text" placeholder="document" />
       </label>
     </div>
 
     <div class="actions">
-      <PixelButton size="lg" :disabled="isProcessing" @click="downloadPdf">
-        {{ isProcessing ? '產生中…' : '💾 下載 PDF' }}
+      <PixelButton size="lg" :disabled="isProcessing" @click="printPdf">
+        {{ isProcessing ? '列印中…' : '列印 / 另存 PDF' }}
       </PixelButton>
-      <PixelButton variant="secondary" @click="downloadHtml">
-        💾 下載 HTML
-      </PixelButton>
+      <PixelButton variant="secondary" @click="downloadHtml">下載 HTML</PixelButton>
     </div>
 
     <p class="warn">
-      ⚠ 提醒:PDF 是「拍照成圖再嵌進去」,文字無法選取。
-      HTML 則是真實標籤,可以複製、可以再編輯。
+      這個版本會走瀏覽器列印流程，所以文字會保留成可選取的文字，不是截圖式 PDF。
     </p>
   </ToolLayout>
 </template>
@@ -299,6 +340,7 @@ onUnmounted(() => {
   gap: 16px;
   margin-bottom: 16px;
 }
+
 @media (min-width: 768px) {
   .grid {
     grid-template-columns: 1fr 1fr;
@@ -310,13 +352,16 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 6px;
 }
+
 .field.tall textarea {
   height: 100%;
 }
+
 .label {
   font-size: 10px;
   color: var(--accent-2);
 }
+
 .pixel-input {
   font-family: inherit;
   font-size: 13px;
@@ -327,11 +372,13 @@ onUnmounted(() => {
   outline: none;
   resize: vertical;
 }
+
 .pixel-input.mono {
   font-family: ui-monospace, Consolas, monospace;
   font-size: 12px;
   line-height: 1.5;
 }
+
 .pixel-input:focus {
   border-color: var(--accent);
 }
@@ -342,6 +389,7 @@ onUnmounted(() => {
   flex-wrap: wrap;
   margin-bottom: 16px;
 }
+
 .file-pill {
   display: inline-flex;
   align-items: center;
@@ -353,6 +401,7 @@ onUnmounted(() => {
   border: 3px solid var(--border);
   cursor: pointer;
 }
+
 .file-pill:hover {
   background: var(--accent);
   color: var(--bg);
@@ -361,11 +410,13 @@ onUnmounted(() => {
 .preview-block {
   margin: 16px 0 24px;
 }
+
 .preview-block h3 {
   color: var(--accent-2);
   margin: 0 0 8px;
   font-size: 13px;
 }
+
 .preview-iframe {
   width: 100%;
   height: 420px;
