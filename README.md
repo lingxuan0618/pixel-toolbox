@@ -167,24 +167,6 @@ pixel-toolbox/
 
 ---
 
-## 📦 部署
-
-### Vercel(推薦)
-1. 把 repo push 到 GitHub
-2. 到 [vercel.com](https://vercel.com) 用 GitHub 登入
-3. Import 這個 repo,Vercel 自動偵測 Vite,直接部署
-4. 完成
-
-### GitHub Pages
-1. `vite.config.ts` 加上 `base: '/pixel-toolbox/'`(或你 GitHub repo 的名字)
-2. push 後到 repo Settings → Pages 開 GitHub Actions
-3. 用 `actions/deploy-pages` workflow 部署
-
-### Netlify / Cloudflare Pages
-作法跟 Vercel 一樣,連 repo 就好。
-
----
-
 ## 📄 授權
 
 [MIT](./LICENSE) © Xuan
